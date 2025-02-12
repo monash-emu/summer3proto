@@ -4267,7 +4267,7 @@ packages:
   name: summer3proto
   version: 0.1.0
   path: .
-  sha256: 9370f47ba01c79e4859386a2442c48b04b2bba9aec1c551040e69cab37cb5118
+  sha256: de2c7112b584ca82ab87943c6072d9c5c8d7876e14fe7d8c0e2371ba8bc2a654
   requires_dist:
   - jax>=0.4.36,<0.5
   - jaxlib>=0.4.36,<0.5
