@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Add a short description here"
 authors = [{name = "David Shipman", email = "dshipman@gmail.com"}]
 requires-python = ">= 3.11"
-dependencies = [ "numpy>=2.2.0,<2.3", "pandas>=2.2.3,<2.3", "numpyro>=0.16.1,<0.17", "blackjax>=1.2.4,<1.3", "jaxtyping>=0.2.36,<0.3", "typeguard>=2.13.3,<2.14", "diffrax==0.6.2", "jax==0.5.0", "jaxlib==0.5.0"]
+dependencies = [ "numpy>=2.2.0,<2.3", "pandas>=2.2.3,<2.3", "numpyro>=0.16.1,<0.17", "blackjax>=1.2.4,<1.3", "jaxtyping>=0.2.36,<0.3", "typeguard>=2.13.3,<2.14", "diffrax==0.6.2", "jax==0.5.0", "jaxlib==0.5.0", "tensorflow-probability>=0.18", "summerepi2>=1.0.4,<2"]
 
 [build-system]
 requires = ["setuptools"]
@@ -15,7 +15,8 @@ channels = ["conda-forge"]
 platforms = ["win-64"]
 
 [tool.pixi.pypi-dependencies]
-summer3proto = { path = ".", editable = true }
+summer3 = {path = "./code", editable = true }
+computegraph = { path = "../computegraph", editable = true}
 
 [tool.pixi.tasks]
 

@@ -1,0 +1,10 @@
+[project]
+name = "summer3"
+version = "0.1.0"
+description = "Add a short description here"
+authors = [{name = "David Shipman", email = "dshipman@gmail.com"}]
+requires-python = ">= 3.11"
+
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"

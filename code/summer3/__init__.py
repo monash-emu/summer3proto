@@ -1,7 +1,9 @@
 import numpy as np
 from jax import numpy as jnp
 
-from summer2 import inspect as mi
+# from summer2 import inspect as mi
+
+from . import inspect as mi
 
 
 class NStrat:
@@ -22,10 +24,20 @@ class NComp:
         self.idx = idx
 
     def __repr__(self):
-        return self.name
+        return f"NComp<{self.name}>"
 
     def __hash__(self) -> int:
-        return f"{self.idx}${self.name}".__hash__()
+        return self.name.__hash__()
+
+
+class NFlow:
+    def __init__(self, name, src_comps, dest_comps):
+        self.name = name
+        self.src_comps = []
+        self.dest_comps = []
+
+    def __repr__(self):
+        return f"NFlow<{self.name}>"
 
 
 class CompartmentQuery:
@@ -61,15 +73,23 @@ class NModel:
 
         comps_to_stratify = self.query_compartments(strat.stratifies).compartments
 
+        source_comps = comps_to_stratify
+        dest_comps = []
         new_comps = []
+
         for c in self.compartments:
             if c in comps_to_stratify:
-                strat_comps = [
+                # for f in self.flows:
+                #     if c in f.src_comps:
+
+                #     if c in f.dest_comps:
+
+                cur_new = [
                     NComp("_".join((c.name, stratum)), c.strata | {strat.name: stratum})
                     for stratum in strat.strata
                 ]
-                print(c, strat_comps)
-                new_comps = new_comps + strat_comps
+                new_comps += cur_new
+                dest_comps += cur_new
             else:
                 new_comps.append(c)
 
@@ -86,10 +106,10 @@ def get_category_indexer(m: NModel, query: list[dict]):
     return np.array([m.query_compartments(q).index for q in query])
 
 
-def get_category_counts(m: NModel, query: list[dict], compartment_values, force=False):
+def get_category_counts(m: NModel, query: list[dict], compartment_values):
     query_vals = [m.query_compartments(q).index for q in query]
     base_len = len(query_vals[0])
-    if all([len(q) == base_len for q in query_vals[1:]]) and not force:
+    if all([len(q) == base_len for q in query_vals[1:]]):
         return compartment_values[np.array(query_vals)].sum(axis=1)
     else:
         return jnp.array([compartment_values[q].sum() for q in query_vals])
