@@ -230,21 +230,24 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/a2/ad/e0d3c824784ff121c03cc031f944bc7e139a8f1870ffd2845cc2dd76f6c4/absl_py-2.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/71/f7/4fd3ace962b08f5b245cedd6b2b8ab74833cea690e8aefe5a2ed0e6bf69e/blackjax-1.2.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/46/dd/c1ff2eb8fbf95a8ca804abb1cc3ce70b283ee7b4bc653c3abac245670400/chex-0.1.87-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/af/1d/66cbeeb4dcc8db93d26867ff89c07d65add52d1b1bf131b5c49c1280bb81/computegraph-0.4.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f7/f7/4f3fc1538df2229be5d40bc85b561eb4190bba7a1b16678bd53446dfff88/diffrax-0.6.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3a/af/411e94c165229882eb2d0a329114826aa52c7c61ef3108d0d3d8ad7189ed/equinox-0.11.10-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/4f/4a/ff8aa2c57300613b69905308c5afe92c5b01112d766c25a305fd6796170a/etils-1.11.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a7/8f/213223fdee199c55db81e2d0c669f30e8285c5be2526c4ed924de39247da/fastprogress-1.0.3-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/f4/58/cc0721a1030fcbab0984beea0bf3c4610ec103f738423cdfa9c4ceb40598/jax-0.5.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/4c/f2/cfa012a0417c9b13b44c8e1d3ebf5fd04e8bb738b5c93e20c9fc97919880/jaxlib-0.5.0-cp313-cp313-win_amd64.whl
+      - pypi: https://files.pythonhosted.org/packages/22/49/b4418a7a892c0dd64442bbbeef54e1cdfe722dfc5a7bf0d611d3f5f90e99/jax-0.4.38-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/de/de/d6c4d234cd426b97459cb070af90792b48643967a0d28641379ee9e10fc9/jaxlib-0.4.38-cp313-cp313-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/64/a4/fc292a90a9c51d1b633cdffe2df30c702e1e0b3e0b568c7b81004cac0a06/jaxopt-0.8.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/94/99/c83c6a97f4382caf1c9bfeeeca935d3eb1f479f711665aeadf4408048107/jaxtyping-0.2.36-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/81/7e/3404d9c62795777c537de076f06828d80e24284efbcbeb6000f33220e401/lineax-0.0.7-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/14/87/30323ad2e52f56262019a4493fe5f5e71067c5561ce7e2f9c75de520f5e8/ml_dtypes-0.5.0-cp313-cp313-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/51/c0/00c9809d8b9346eb238a6bbd5f83e846a4ce4503da94a4c08cb7284c325b/multipledispatch-1.0.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/b9/54/dd730b32ea14ea797530a4479b2ed46a6fb250f682a9cfb997e968bf0261/networkx-3.4.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ea/8b/ae9187460b6fc8f0a01074f84b7edcbba605a7c70aebecf345ce9bc2b43c/numpyro-0.16.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/23/cd/066e86230ae37ed0be70aae89aabf03ca8d9f39c8aea0dec8029455b5540/opt_einsum-3.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5c/24/28d0bb21600a78e46754947333ec9a297044af884d360092eb8561575fe9/optax-0.2.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/36/94/1726f0a89ff40760ec2c789b4d5aba6fa283082208f23a707f3c01140f92/optimistix-0.0.9-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/25/95/2301570ad169f173a42ba38729a7b83e20f68f935e1f8a1d658e1c1cd0ef/summerepi2-1.3.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/03/98/eb27cc78ad3af8e302c9d8ff4977f5026676e130d28dd7578132a457170c/toolz-1.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/9a/bb/d43e5c75054e53efce310e79d63df0ac3f25e34c926be5dffb7d283fb2a8/typeguard-2.13.3-py3-none-any.whl
@@ -780,6 +783,19 @@ packages:
   - pkg:pypi/comm?source=conda-forge-mapping
   size: 12103
   timestamp: 1733503053903
+- kind: pypi
+  name: computegraph
+  version: 0.4.5
+  url: https://files.pythonhosted.org/packages/af/1d/66cbeeb4dcc8db93d26867ff89c07d65add52d1b1bf131b5c49c1280bb81/computegraph-0.4.5-py3-none-any.whl
+  sha256: b7fc46b31292818aed27a1fbd07a6412633196711c71657ef21d50739526a197
+  requires_dist:
+  - jax>=0.4.28
+  - jaxlib>=0.4.28,<0.5.0
+  - matplotlib>=3.5.1 ; extra == 'plotting'
+  - networkx>=3.3,<4.0
+  - plotly>=5.6.0 ; extra == 'plotting'
+  - pygraphviz>=1.8 ; sys_platform == 'linux' and extra == 'plotting'
+  requires_python: '>=3.10.0'
 - kind: conda
   name: contourpy
   version: 1.3.1
@@ -1655,43 +1671,43 @@ packages:
   timestamp: 1733493720346
 - kind: pypi
   name: jax
-  version: 0.5.0
-  url: https://files.pythonhosted.org/packages/f4/58/cc0721a1030fcbab0984beea0bf3c4610ec103f738423cdfa9c4ceb40598/jax-0.5.0-py3-none-any.whl
-  sha256: b3907aa87ae2c340b39cdbf80c07a74550369cafcaf7398fb60ba58d167345ab
+  version: 0.4.38
+  url: https://files.pythonhosted.org/packages/22/49/b4418a7a892c0dd64442bbbeef54e1cdfe722dfc5a7bf0d611d3f5f90e99/jax-0.4.38-py3-none-any.whl
+  sha256: 78987306f7041ea8500d99df1a17c33ed92620c2268c4c3677fb24e06712be64
   requires_dist:
-  - jaxlib<=0.5.0,>=0.5.0
+  - jaxlib<=0.4.38,>=0.4.38
   - ml-dtypes>=0.4.0
-  - numpy>=1.25
+  - numpy>=1.24
   - numpy>=1.26.0 ; python_version >= '3.12'
   - opt-einsum
-  - scipy>=1.11.1
-  - jaxlib==0.5.0 ; extra == 'minimum-jaxlib'
-  - jaxlib==0.4.38 ; extra == 'ci'
-  - jaxlib<=0.5.0,>=0.5.0 ; extra == 'tpu'
+  - scipy>=1.10
+  - scipy>=1.11.1 ; python_version >= '3.12'
+  - jaxlib==0.4.38 ; extra == 'minimum-jaxlib'
+  - jaxlib==0.4.36 ; extra == 'ci'
+  - jaxlib<=0.4.38,>=0.4.38 ; extra == 'tpu'
   - libtpu-nightly==0.1.dev20241010+nightly.cleanup ; extra == 'tpu'
-  - libtpu==0.0.8 ; extra == 'tpu'
+  - libtpu==0.0.7 ; extra == 'tpu'
   - requests ; extra == 'tpu'
-  - jaxlib==0.5.0 ; extra == 'cuda'
-  - jax-cuda12-plugin[with-cuda]<=0.5.0,>=0.5.0 ; extra == 'cuda'
-  - jaxlib==0.5.0 ; extra == 'cuda12'
-  - jax-cuda12-plugin[with-cuda]<=0.5.0,>=0.5.0 ; extra == 'cuda12'
-  - jaxlib==0.5.0 ; extra == 'cuda12-pip'
-  - jax-cuda12-plugin[with-cuda]<=0.5.0,>=0.5.0 ; extra == 'cuda12-pip'
-  - jaxlib==0.5.0 ; extra == 'cuda12-local'
-  - jax-cuda12-plugin==0.5.0 ; extra == 'cuda12-local'
-  - jaxlib==0.5.0 ; extra == 'rocm'
-  - jax-rocm60-plugin<=0.5.0,>=0.5.0 ; extra == 'rocm'
+  - jaxlib==0.4.38 ; extra == 'cuda'
+  - jax-cuda12-plugin[with-cuda]<=0.4.38,>=0.4.38 ; extra == 'cuda'
+  - jaxlib==0.4.38 ; extra == 'cuda12'
+  - jax-cuda12-plugin[with-cuda]<=0.4.38,>=0.4.38 ; extra == 'cuda12'
+  - jaxlib==0.4.38 ; extra == 'cuda12-pip'
+  - jax-cuda12-plugin[with-cuda]<=0.4.38,>=0.4.38 ; extra == 'cuda12-pip'
+  - jaxlib==0.4.38 ; extra == 'cuda12-local'
+  - jax-cuda12-plugin==0.4.38 ; extra == 'cuda12-local'
   - kubernetes ; extra == 'k8s'
   requires_python: '>=3.10'
 - kind: pypi
   name: jaxlib
-  version: 0.5.0
-  url: https://files.pythonhosted.org/packages/4c/f2/cfa012a0417c9b13b44c8e1d3ebf5fd04e8bb738b5c93e20c9fc97919880/jaxlib-0.5.0-cp313-cp313-win_amd64.whl
-  sha256: 61b4d26cd6a0c49ba0b1e4340c7d29198913ee2dc70b65ee90752717d22305bb
+  version: 0.4.38
+  url: https://files.pythonhosted.org/packages/de/de/d6c4d234cd426b97459cb070af90792b48643967a0d28641379ee9e10fc9/jaxlib-0.4.38-cp313-cp313-win_amd64.whl
+  sha256: 4103db0b3a38a5dc132741237453c24d8547290a22079ba1b577d6c88c95300a
   requires_dist:
-  - scipy>=1.11.1
-  - numpy>=1.25
+  - scipy>=1.10
+  - numpy>=1.24
   - ml-dtypes>=0.2.0
+  - scipy>=1.11.1 ; python_version >= '3.12'
   requires_python: '>=3.10'
 - kind: pypi
   name: jaxopt
@@ -3098,6 +3114,42 @@ packages:
   - pkg:pypi/nest-asyncio?source=conda-forge-mapping
   size: 11543
   timestamp: 1733325673691
+- kind: pypi
+  name: networkx
+  version: 3.4.2
+  url: https://files.pythonhosted.org/packages/b9/54/dd730b32ea14ea797530a4479b2ed46a6fb250f682a9cfb997e968bf0261/networkx-3.4.2-py3-none-any.whl
+  sha256: df5d4365b724cf81b8c6a7312509d0c22386097011ad1abe274afd5e9d3bbc5f
+  requires_dist:
+  - numpy>=1.24 ; extra == 'default'
+  - scipy!=1.11.0,!=1.11.1,>=1.10 ; extra == 'default'
+  - matplotlib>=3.7 ; extra == 'default'
+  - pandas>=2.0 ; extra == 'default'
+  - changelist==0.5 ; extra == 'developer'
+  - pre-commit>=3.2 ; extra == 'developer'
+  - mypy>=1.1 ; extra == 'developer'
+  - rtoml ; extra == 'developer'
+  - sphinx>=7.3 ; extra == 'doc'
+  - pydata-sphinx-theme>=0.15 ; extra == 'doc'
+  - sphinx-gallery>=0.16 ; extra == 'doc'
+  - numpydoc>=1.8.0 ; extra == 'doc'
+  - pillow>=9.4 ; extra == 'doc'
+  - texext>=0.6.7 ; extra == 'doc'
+  - myst-nb>=1.1 ; extra == 'doc'
+  - intersphinx-registry ; extra == 'doc'
+  - osmnx>=1.9 ; extra == 'example'
+  - momepy>=0.7.2 ; extra == 'example'
+  - contextily>=1.6 ; extra == 'example'
+  - seaborn>=0.13 ; extra == 'example'
+  - cairocffi>=1.7 ; extra == 'example'
+  - igraph>=0.11 ; extra == 'example'
+  - scikit-learn>=1.5 ; extra == 'example'
+  - lxml>=4.6 ; extra == 'extra'
+  - pygraphviz>=1.14 ; extra == 'extra'
+  - pydot>=3.0.1 ; extra == 'extra'
+  - sympy>=1.10 ; extra == 'extra'
+  - pytest>=7.2 ; extra == 'test'
+  - pytest-cov>=4.0 ; extra == 'test'
+  requires_python: '>=3.10'
 - kind: conda
   name: notebook
   version: 7.3.1
@@ -4267,7 +4319,7 @@ packages:
   name: summer3proto
   version: 0.1.0
   path: .
-  sha256: 52524cebda376f3e20934a3d30c701880338ad70b78443b25b6e554fed97efde
+  sha256: ece40b05155d02548d2cd0cf1d2af88890cdcae76c0312c93f8c91c336743fb5
   requires_dist:
   - numpy>=2.2.0,<2.3
   - pandas>=2.2.3,<2.3
@@ -4276,10 +4328,32 @@ packages:
   - jaxtyping>=0.2.36,<0.3
   - typeguard>=2.13.3,<2.14
   - diffrax==0.6.2
-  - jax==0.5.0
-  - jaxlib==0.5.0
+  - jax==0.4.38
+  - jaxlib==0.4.38
+  - summerepi2==1.3.6
   requires_python: '>=3.11'
   editable: true
+- kind: pypi
+  name: summerepi2
+  version: 1.3.6
+  url: https://files.pythonhosted.org/packages/25/95/2301570ad169f173a42ba38729a7b83e20f68f935e1f8a1d658e1c1cd0ef/summerepi2-1.3.6-py3-none-any.whl
+  sha256: 2803e9d5c8478297c99bd9576cb45545e3f4ff15412034f4dfeabd724654e9ee
+  requires_dist:
+  - computegraph==0.4.5
+  - ipykernel>=6.15.1,<7.0.0 ; extra == 'docs'
+  - jax>=0.4.24
+  - jaxlib>=0.4.24
+  - matplotlib>=3.4.3 ; extra == 'docs'
+  - nbsphinx>=0.8.2,<0.9.0 ; extra == 'docs'
+  - networkx>=2.6.2
+  - numpy>=1.20.3
+  - pandas>=1.3.2
+  - plotly>=5.5.0
+  - pygraphviz>=1.10,<2.0 ; extra == 'docs'
+  - recommonmark>=0.7.1,<0.8.0 ; extra == 'docs'
+  - sphinx-rtd-theme>=0.5.1,<0.6.0 ; extra == 'docs'
+  - sphinxcontrib-napoleon>=0.7,<0.8 ; extra == 'docs'
+  requires_python: '>=3.10.0'
 - kind: conda
   name: tbb
   version: 2021.13.0
