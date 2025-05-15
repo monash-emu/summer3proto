@@ -6,6 +6,7 @@ from copy import deepcopy
 
 import jax
 from jax import numpy as jnp
+import numpy as np
 
 
 class Stratification:
@@ -16,17 +17,48 @@ class Stratification:
     def __repr__(self):
         return f"Stratification: {self.name}"
 
+    def __getitem__(self, k):
+        if isinstance(k, str):
+            if k in self.strata:
+                return (self, [k])
+            else:
+                raise KeyError()
+        elif k is Ellipsis:
+            return (self, [strat for strat in self.strata])
+        else:
+            strata = [ki for ki in k]
+            for s in strata:
+                if s not in self.strata:
+                    raise KeyError()
+            return (self, [ki for ki in k])
+
+    def categories(self):
+        return [[(self, [stratum])] for stratum in self.strata]
+
     # +++
     # Provide an easy way to obtain StratSpec - maybe getitem?
 
 
 class Compartment:
-    def __init__(self, strata: list[tuple[Stratification, str]], index: int):
+    def __init__(self, strata: list[tuple[Stratification, str]]):
         self.strata = strata
-        self.index = index
 
     def __repr__(self):
         return "Compartment :" + repr(self.strata)
+
+    # def __eq__(self, other):
+    #    return set(self.strata) == set(other.strata)
+
+    def __hash__(self):
+        return hash(tuple(*(self.strata,)))
+
+    def matches(self, other, strats):
+        a_strats = {strat: stratum for (strat, stratum) in self.strata}
+        b_strats = {strat: stratum for (strat, stratum) in other.strata}
+        for strat in strats:
+            if a_strats[strat] != b_strats[strat]:
+                return False
+        return True
 
 
 StratSpec = tuple[Stratification, str] | tuple[Stratification, list[str]] | None
@@ -34,13 +66,43 @@ StratMap = dict[Stratification, StratSpec]
 CompartmentArray = np.ndarray[Compartment]
 
 
+def validate_qspec(qspec: list[StratSpec]):
+    if isinstance(qspec, list):
+        return qspec
+    elif isinstance(qspec, tuple):
+        return [qspec]
+    raise TypeError("Invalid query specification")
+
+
 class CompartmentContainer:
     compartments: CompartmentArray
 
-    def __init__(self, compartments: CompartmentArray):
+    def __init__(
+        self,
+        compartments: CompartmentArray,
+        root: "CompartmentMap" = None,
+        parent: "CompartmentContainer" = None,
+        indices: np.array = None,
+    ):
         self.compartments = np.array(compartments)
+        if parent is None and indices is None:
+            parent = self
+            indices = np.arange(len(compartments))
 
-    def query(self, traits: list[StratSpec]):
+        if parent is not None and indices is not None:
+            self.parent = parent
+            self.indices = indices
+        else:
+            raise Exception("Both or neither of parent and indices must be specified")
+
+        self.root = root
+
+    def __getitem__(self, indices):
+        compartments = self.compartments[indices]
+        return CompartmentContainer(compartments, self.root, self, indices)
+
+    def query(self, traits: list[StratSpec]) -> "CompartmentContainer":
+        traits = validate_qspec(traits)
         qres = []
         indices = []
         for i, c in enumerate(self.compartments):
@@ -55,20 +117,43 @@ class CompartmentContainer:
             if has_all:
                 qres.append(c)
                 indices.append(i)
-        return CompartmentView(np.array(qres), self, np.array(indices))
+        return CompartmentContainer(np.array(qres), self.root, self, np.array(indices))
+
+    def wrap_data(self, data):
+        return CompartmentDataContainer(self.compartments, self, data)
+
+    def zeros(self, lib=jnp):
+        return CompartmentDataContainer(
+            self.compartments, self, lib.zeros(len(self.compartments))
+        )
+
+    def __repr__(self):
+        if self.parent == self:
+            return "CompartmentContainer:\n" + repr(self.compartments)
+        else:
+            return (
+                f"CompartmentContainer view of 0x{id(self.parent)}:\n"
+                + repr(self.compartments)
+                + repr(self.indices)
+            )
+
+    def __len__(self):
+        return len(self.compartments)
 
 
 class CompartmentMap(CompartmentContainer):
     def __init__(self, compartments: CompartmentArray, stratifications: StratMap):
         super().__init__(compartments)
 
+        self.root = self
         self.stratifications = stratifications
         self._base_strat = list(stratifications)[0]
+        self.remappings = {}
 
     @classmethod
     def new(cls, base_strat: Stratification):
         compartments = np.array(
-            [Compartment([(base_strat, s)], i) for i, s in enumerate(base_strat.strata)]
+            [Compartment([(base_strat, s)]) for s in base_strat.strata]
         )
         stratifications: dict[Stratification, Optional[tuple]] = {base_strat: None}
         return cls(compartments, stratifications)
@@ -106,14 +191,13 @@ class CompartmentMap(CompartmentContainer):
             ):
                 remapped_comps[c] = []
                 for stratum in strat.strata:
-                    new_c = Compartment(c.strata + [(strat, stratum)], i)
+                    new_c = Compartment(c.strata + [(strat, stratum)])
                     out_comps.append(new_c)
                     new_comps.append(new_c)
                     remapped_comps[c].append(new_c)
                     i += 1
             else:
                 out_comps.append(c)
-                remapped_comps[c] = [c]
                 i += 1
 
         if len(new_comps) == 0:
@@ -122,11 +206,15 @@ class CompartmentMap(CompartmentContainer):
         if in_place:
             self.compartments = np.array(out_comps)
             self.stratifications[strat] = stratifies
+            self.remappings[strat] = remapped_comps
         else:
             stratifications = self.stratifications.copy()
             stratifications[strat] = stratifies
-            return CompartmentMap(out_comps, stratifications), strat, remapped_comps
-        return self, strat, remapped_comps
+            new_cmap = CompartmentMap(out_comps, stratifications)
+            new_cmap.remappings = self.remappings.copy()
+            new_cmap.remappings[strat] = remapped_comps
+            return new_cmap, strat
+        return strat
 
     def rebase(
         self, new_base_strat: Stratification, key, in_place=False
@@ -140,8 +228,7 @@ class CompartmentMap(CompartmentContainer):
                 new_stratifications[k] = v
         # self.stratifications = new_stratifications
         new_c = [
-            Compartment([(new_base_strat, key)] + c.strata, c.index)
-            for c in self.compartments
+            Compartment([(new_base_strat, key)] + c.strata) for c in self.compartments
         ]
 
         if in_place:
@@ -172,55 +259,50 @@ class CompartmentMap(CompartmentContainer):
             self.stratifications[k] = v
 
 
-class CompartmentView(CompartmentContainer):
-    """View of a subset of compartments"""
-
+class CompartmentDataContainer(CompartmentContainer):
     def __init__(
         self,
         compartments: CompartmentArray,
-        parent: CompartmentMap,
-        indices: np.ndarray,
+        root: CompartmentMap,
+        data: jnp.array,
+        parent: "CompartmentDataContainer" = None,
+        indices: np.array = None,
     ):
-        super().__init__(compartments)
-        self.parent = parent
-        self.indices = indices
+        super().__init__(
+            compartments=compartments, root=root, parent=parent, indices=indices
+        )
+        self.data = data
+
+    def query(self, traits: list[StratSpec]):
+        qcomp_view = super().query(traits)
+        return CompartmentDataContainer(
+            qcomp_view.compartments,
+            self.root,
+            self.data[qcomp_view.indices],
+            self,
+            qcomp_view.indices,
+        )
 
     def __repr__(self):
-        return (
-            f"CompartmentView of {self.parent}:\n"
-            + repr(self.compartments)
-            + repr(self.indices)
-        )
+        if self.parent == self:
+            return (
+                "CompartmentDataContainer:\n"
+                + repr(self.compartments)
+                + repr(self.data)
+            )
+        else:
+            return (
+                f"CompartmentDataContainer view of 0x{id(self.parent)}:\n"
+                f"Compartments:\n{repr(self.compartments)}\n"
+                f"Indices:\n{repr(self.indices)}\n"
+                f"Data:\n{repr(self.data)}\n"
+            )
 
 
 def iter_stratspec(sspec: StratSpec):
     strat, strata = sspec
     for stratum in strata:
         yield (strat, stratum)
-
-
-class CompartmentGroup:
-    """Maybe need a better name - really just a container of traits (arguments to a query)"""
-
-    def __init__(self, traits=list[StratSpec]):
-        self.traits = traits
-
-    def query(self, cmap: CompartmentMap):
-        qres = []
-        indices = []
-        for i, c in enumerate(cmap.compartments):
-            has_all = True
-            for t in self.traits:
-                has_trait = False
-                for sspec in iter_stratspec(t):
-                    has_trait = has_trait or sspec in c.strata
-                if not has_trait:
-                    has_all = False
-                    break
-            if has_all:
-                qres.append(c)
-                indices.append(i)
-        return CompartmentView(np.array(qres), cmap, np.array(indices))
 
 
 def category_idx_reduction(cat_indices: list[np.ndarray], src: jax.Array):
@@ -230,101 +312,194 @@ def category_idx_reduction(cat_indices: list[np.ndarray], src: jax.Array):
         return jnp.array([src[c].sum() for c in cat_indices])
 
 
-class LA:
-    def __init__(self, data, axes):
+def query_cat_reduction(query_cats, comp_data):
+    indices = [comp_data.query(qc).indices for qc in query_cats]
+    return category_idx_reduction(indices, comp_data.data)
+
+
+def cat_indices(query_cats, comp_data):
+    indices = [comp_data.query(qc).indices for qc in query_cats]
+    return np.array(indices)
+
+
+### Flows
+def strats_for_comp(c):
+    strats = []
+    for strat, stratum in c.strata:
+        strats.append(strat)
+    return list(set(strats))
+
+
+def strats_for_cmap(cmap):
+    src_strats = set()
+    for c in cmap.compartments:
+        cstrats = strats_for_comp(c)
+        for s in cstrats:
+            src_strats.add(s)
+    return list(src_strats)
+
+
+def reconcile_broadcast(srcq, destq, cmap, strategy=None):
+    src = cmap.query(srcq)
+    dest = cmap.query(destq)
+    if len(src.compartments) == len(dest.compartments):
+        return src, dest, None
+    else:
+        if len(src) > len(dest):
+            print("Gather")
+            src_tmp = src
+            src = dest
+            dest = src_tmp
+            scatter = False
+        else:
+            print("Scatter")
+            scatter = True
+        src_strats = set(strats_for_cmap(src))
+        dest_strats = set(strats_for_cmap(dest))
+        transition_strats = set([strat for (strat, q) in srcq])
+        common_strats = src_strats.intersection(dest_strats) - transition_strats
+        scatters = list(dest_strats.difference(src_strats))
+
+        comp_idx = {c: i for i, c in enumerate(cmap.compartments)}
+
+        if len(scatters):
+            scatter_strat = scatters[0]
+            out_src_comps = []
+            out_dest_comps = []
+            out_src_indices = []
+            out_dest_indices = []
+            adj = []
+
+            for src_comp in src.compartments:
+                for dest_comp in dest.compartments:
+                    if src_comp.matches(dest_comp, common_strats):
+                        out_src_comps.append(src_comp)
+                        out_dest_comps.append(dest_comp)
+                        out_src_indices.append(comp_idx[src_comp])
+                        out_dest_indices.append(comp_idx[dest_comp])
+                        if scatter:
+                            adj.append(1.0 / len(scatter_strat.strata))
+
+            out_src_comps = np.array(out_src_comps)
+            out_dest_comps = np.array(out_dest_comps)
+            out_src_indices = np.array(out_src_indices)
+            out_dest_indices = np.array(out_dest_indices)
+
+            rec_src = CompartmentContainer(
+                out_src_comps, src.root, src.root, out_src_indices
+            )
+            rec_dest = CompartmentContainer(
+                out_dest_comps, dest.root, dest.root, out_dest_indices
+            )
+            if scatter:
+                return rec_src, rec_dest, np.array(adj)
+            else:
+                return rec_dest, rec_src, None
+
+
+class CategoryData:
+    def __init__(self, cats, data):
+        self.cats = cats
         self.data = data
-        self.axes = axes
-
-        self._ax_to_idx = {k: i for i, k in enumerate(axes)}
-        self._idx_to_ax = {v: k for k, v in self._ax_to_idx.items()}
-
-    def transpose(self, axes):
-        transposed = self.data.transpose([self._ax_to_idx[a] for a in axes])
-        return LA(transposed, axes)
-
-    def expand(self, ax, index=-1):
-        expanded = jnp.expand_dims(self.data, index)
-        if index == -1:
-            new_axes = self.axes + [ax]
-        else:
-            new_axes = []
-            for a, i in enumerate(self.axes):
-                if i == index:
-                    new_axes.append(ax)
-                new_axes.append(a)
-        return LA(expanded, new_axes)
-
-    def reconcile(self, other):
-        s_set = set(self.axes)
-        o_set = set(other.axes)
-        s_extras = s_set.difference(o_set)
-        o_extras = o_set.difference(s_set)
-        other_expanded = other
-        self_expanded = self
-        for eax in list(s_extras):
-            other_expanded = other_expanded.expand(eax)
-        for eax in list(o_extras):
-            self_expanded = self_expanded.expand(eax)
-        return self_expanded, other_expanded.transpose(self_expanded.axes)
-
-    def to_axis(self, ax):
-        if ax not in self.axes:
-            raise KeyError("Axis not found", ax)
-        return [a for a in self.axes if a != ax]
-
-    def __mul__(self, other):
-        return self._lop(other, jnp.multiply)
-
-    def __rmul__(self, other):
-        return self._rop(other, jnp.multiply)
-
-    def __truediv__(self, other):
-        srec, orec = self.reconcile(other)
-        return LA(srec.data / orec.data, srec.axes)
-
-    def __rtruediv__(self, other):
-        return self._rop(other, jnp.true_divide)
-
-    def _lop(self, other, op):
-        if isinstance(other, float):
-            return LA(op(self.data, other), self.axes)
-        srec, orec = self.reconcile(other)
-        return LA(op(srec.data, orec.data), srec.axes)
-
-    def _rop(self, other, op):
-        if isinstance(other, float):
-            return LA(op(other, self.data), self.axes)
-        else:
-            raise TypeError("Unsupported type", other)
-
-    def __add__(self, other):
-        srec, orec = self.reconcile(other)
-        return LA(srec.data + orec.data, srec.axes)
-
-    def __sub__(self, other):
-        srec, orec = self.reconcile(other)
-        return LA(srec.data - orec.data, srec.axes)
-
-    def sum(self, axis=None):
-        return self._liftreduction("sum", axis)
-
-    def _reduce_axes(self, axis=None):
-        if axis is None:
-            lifted_ax = None
-            reduced_axes = self.axes
-        elif isinstance(axis, str):
-            lifted_ax = self._ax_to_idx[axis]
-            reduced_axes = [a for a in self.axes if a != axis]
-        else:
-            lifted_ax = [self._ax_to_idx[a] for a in axis]
-            reduced_axes = [a for a in self.axes if a not in axis]
-        return lifted_ax, reduced_axes
-
-    def _liftreduction(self, op, axis=None):
-        lifted_ax, reduced_axes = self._reduce_axes(axis)
-        return LA(getattr(self.data, op)(axis=lifted_ax), reduced_axes)
 
     def __repr__(self):
-        data_repr = repr(self.data)
-        info_repr = f"LA {self.axes} {self.data.shape}\n"
-        return info_repr + data_repr
+        return f"CategoryData:\n{self.cats}\n{self.data}\n"
+
+
+class ActualizedTransitionFlow:
+    def __init__(self, flow, src_cmap, dest_cmap, adjustments, apply_func):
+        self.flow = flow
+        self.src_cmap = src_cmap
+        self.dest_cmap = dest_cmap
+        self.adjustments = adjustments
+        self.get_flow_vals = apply_func
+
+
+class TransitionFlow:
+    def __init__(self, srcq, destq, param):
+        self.srcq = validate_qspec(srcq)
+        self.destq = validate_qspec(destq)
+        self.param = param
+        self.adjustments = []
+
+    def actualize(self, cmap):
+        realised_adjustments = []
+
+        src_cmap, dest_cmap, adj = reconcile_broadcast(self.srcq, self.destq, cmap)
+
+        if adj is not None:
+            realised_adjustments.append(adj)
+
+        def apply_flow(cdatamap, params):
+            src_comp_vals = cdatamap.data[src_cmap.indices]
+            param = params[self.param]
+            if isinstance(param, CategoryData):
+                cidx = cat_indices(param.cats, src_cmap)
+                flow_vals = src_comp_vals.at[cidx.T].mul(param.data)
+            else:
+                flow_vals = params[self.param] * src_comp_vals
+            for adj in realised_adjustments:
+                flow_vals = flow_vals * adj
+            return flow_vals
+
+        return ActualizedTransitionFlow(
+            self, src_cmap, dest_cmap, realised_adjustments, apply_flow
+        )
+
+
+class ActualizedExitFlow:
+    def __init__(self, flow, src_cmap, adjustments, apply_func):
+        self.flow = flow
+        self.src_cmap = src_cmap
+        self.adjustments = adjustments
+        self.get_flow_vals = apply_func
+
+
+class ExitFlow:
+    def __init__(self, srcq, param):
+        self.srcq = validate_qspec(srcq)
+        self.param = param
+        self.adjustments = []
+
+    def actualize(self, cmap):
+        src_cmap = cmap.query(self.srcq)
+
+        def apply_flow(cdatamap, params):
+            src_comp_vals = cdatamap.data[src_cmap.indices]
+            param = params[self.param]
+            if isinstance(param, CategoryData):
+                cidx = cat_indices(param.cats, src_cmap)
+                flow_vals = src_comp_vals.at[cidx.T].mul(param.data)
+            else:
+                flow_vals = params[self.param] * src_comp_vals
+            return flow_vals
+
+        return ActualizedExitFlow(self, src_cmap, self.adjustments, apply_flow)
+
+
+class ActualizedEntryFlow:
+    def __init__(self, flow, dest_cmap, adjustments, apply_func):
+        self.flow = flow
+        self.dest_cmap = dest_cmap
+        self.adjustments = adjustments
+        self.get_flow_vals = apply_func
+
+
+class EntryFlow:
+    def __init__(self, destq, param):
+        self.destq = validate_qspec(destq)
+        self.param = param
+        self.adjustments = []
+
+    def actualize(self, cmap):
+        dest_cmap = cmap.query(self.destq)
+
+        def apply_flow(cdatamap, params):
+            param = params[self.param]
+            if isinstance(param, CategoryData):
+                raise Exception("CategoryData not yet supported for EntryFlow")
+            else:
+                flow_vals = param
+            return flow_vals
+
+        return ActualizedEntryFlow(self, dest_cmap, self.adjustments, apply_flow)
