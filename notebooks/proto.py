@@ -422,7 +422,10 @@ class TransitionFlow:
         self.param = param
         self.adjustments = []
 
-    def actualize(self, cmap):
+    def actualize(self, cmap, param_key=None):
+
+        param_key = param_key or self.param
+
         realised_adjustments = []
 
         src_cmap, dest_cmap, adj = reconcile_broadcast(self.srcq, self.destq, cmap)
@@ -432,12 +435,12 @@ class TransitionFlow:
 
         def apply_flow(cdatamap, params):
             src_comp_vals = cdatamap.data[src_cmap.indices]
-            param = params[self.param]
+            param = params[param_key]
             if isinstance(param, CategoryData):
                 cidx = cat_indices(param.cats, src_cmap)
                 flow_vals = src_comp_vals.at[cidx.T].mul(param.data)
             else:
-                flow_vals = params[self.param] * src_comp_vals
+                flow_vals = param * src_comp_vals
             for adj in realised_adjustments:
                 flow_vals = flow_vals * adj
             return flow_vals
