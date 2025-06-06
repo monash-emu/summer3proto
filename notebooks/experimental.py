@@ -1,4 +1,10 @@
 from jax import numpy as jnp
+import numpy as np
+from proto import CompartmentContainer, get_cat_indices, StratSpec, CategoryGroup
+import pandas as pd
+from numbers import Integral
+from typing import Optional
+from utils import get_category_names
 
 
 class LA:
@@ -99,3 +105,188 @@ class LA:
         data_repr = repr(self.data)
         info_repr = f"LA {self.axes} {self.data.shape}\n"
         return info_repr + data_repr
+
+
+class ManagedIndex:
+    def __init__(self, dim, index):
+        self.dim = dim
+        self.index = index
+
+    def __repr__(self):
+        return f"ManagedIndex: maps {self.dim}\n" + repr(self.index)
+
+    def query(self, q):
+        if isinstance(self.index, CompartmentContainer):
+            qres = self.index.query(q)
+            new_subidx, idx_arr = qres, qres.indices
+        elif isinstance(self.index, pd.Index):
+            pdlookup = pd.Series(index=self.index, data=np.arange(len(self.index)))
+            qbackref = pdlookup[q]
+            if isinstance(qbackref, Integral):
+                qbackref = pdlookup[[q]]
+            new_subidx, idx_arr = qbackref.index, np.array(qbackref)
+        else:
+            raise TypeError(self.index)
+        return ManagedIndex(self.dim, new_subidx), _squash_to_slice(idx_arr)
+
+
+class ManagedCategoryGroupIndex(ManagedIndex):
+    def __init__(self, dim: str, index: CategoryGroup):
+        super().__init__(dim, index)
+
+    def query(self, q):
+        qres = self.index.query(q)
+        return ManagedCategoryGroupIndex(self.dim, qres, _squash_to_slice(qres.indices))
+
+    def __repr__(self):
+        return f"ManagedCategoryGroupIndex: maps [{self.dim}]\n" + repr(self.index)
+
+
+class ManagedArray:
+    def __init__(
+        self,
+        data,
+        dims,
+        indices: Optional[dict[str, ManagedIndex]] = None,
+        labellers=None,
+    ):
+        self.data = data
+        self._la = LA(data, dims)
+        self.dims = dims
+        self._dim_idx = {dim: i for i, dim in enumerate(dims)}
+        self.indices = indices or {}
+        self.labellers = labellers or {}
+
+    def add_index(self, name, dim, index):
+        self.indices[name] = ManagedIndex(dim, index)
+
+    @property
+    def shape(self):
+        return self.data.shape
+
+    def query(self, **kwargs):
+        qindices = []
+        for idx_name, q in kwargs.items():
+            mindex = self.indices[idx_name]
+            di = self._dim_idx[mindex.dim]
+            new_subidx, qidx = mindex.query(
+                q
+            )  # self._handle_index_query(mindex.index, q)
+            qindices.append((di, (idx_name, new_subidx, qidx)))
+        # qindices = sorted(qindices, key=lambda x: x[0])
+        qindices = {dimi: q for dimi, q in qindices}
+        slicer = []
+        new_indices = {}
+        for i in range(len(self.dims)):
+            if i in qindices:
+                idx_name, new_subidx, qidx = qindices[i]
+                new_indices[idx_name] = new_subidx
+                slicer.append(qidx)
+            else:
+                slicer.append(...)
+        for k, v in self.indices.items():
+            if k not in new_indices:
+                new_indices[k] = v
+        try:
+            out_data = self.data[*slicer]
+            return ManagedArray(out_data, self.dims, new_indices)
+        except:
+            raise Exception("Unsupported slice styles; try chaining queries")
+
+    def __repr__(self):
+        return "ManagedArray\n" + repr(self.dims) + repr(self.indices) + repr(self.data)
+
+    def sumcats(self, index_name, categories: CategoryGroup):
+        idx_name, catgroups = index_name, categories
+        indexer = self.indices[idx_name]
+        maps_dim, cat_cmap = indexer.dim, indexer.index
+        cat_indices = get_cat_indices(catgroups, cat_cmap)
+        # cat_names = get_category_names(catgroups)
+        dim_idx = self._dim_idx[maps_dim]
+        if dim_idx == (len(self.dims) - 1):
+            slicers = [slice() for i in range(len(self.dims) - 1)]
+
+            if len(set([len(c) for c in cat_indices])) == 1:
+                slicers.append(np.array(cat_indices))
+                new_data = self.data[*slicers].sum(axis=-1)
+            else:
+                new_data = jnp.array(
+                    [self.data[*([slicers] + [c])].sum(axis=-1) for c in cat_indices]
+                )
+        else:
+            raise Exception("Only timecubes supported currently")
+        out_indices = {
+            name: midx for name, midx in self.indices.items() if midx.dim != maps_dim
+        }
+        out_indices["category"] = ManagedCategoryGroupIndex("category", catgroups)
+        return ManagedArray(new_data, ["time", "category"], indices=out_indices)
+
+    def sum(self, cats=None, dims=None):
+        if cats is not None:
+            idx_name, catgroups = cats
+            indexer = self.indices[idx_name]
+            maps_dim, cat_cmap = indexer.dim, indexer.index
+            cat_indices = get_cat_indices(catgroups, cat_cmap)
+            # cat_names = get_category_names(catgroups)
+            dim_idx = self._dim_idx[maps_dim]
+            if dim_idx == 1 and len(self.dims) == 2:
+                if len(set([len(c) for c in cat_indices])) == 1:
+                    new_data = self.data[:, np.array(cat_indices)].sum(axis=-1)
+                else:
+                    new_data = jnp.array(
+                        [self.data[:, c].sum(axis=-1) for c in cat_indices]
+                    )
+            else:
+                raise Exception("Only timecubes supported currently")
+            out_indices = {
+                name: midx
+                for name, midx in self.indices.items()
+                if midx.dim != maps_dim
+            }
+            out_indices["category"] = ManagedCategoryGroupIndex(
+                "category", CategoryGroup(catgroups)
+            )
+            return ManagedArray(new_data, ["time", "category"], indices=out_indices)
+
+        if dims is not None:
+            lma = LA(self.data, self.dims)
+            lsummed = lma.sum(dims)
+            out_indices = {
+                name: midx
+                for name, midx in self.indices.items()
+                if midx.dim in lsummed.axes
+            }
+            return ManagedArray(lsummed.data, lsummed.axes, out_indices)
+
+    def to_pandas_df(self):
+        if len(self.dims) != 2:
+            raise Exception("Only 2d ManagedArrays supported for Pandas export")
+        data_dim = self.dims[1]
+        if data_dim in self.labellers:
+            labeller = self.labellers[data_dim]
+            columns = labeller(self)
+        elif data_dim in self.indices:
+            col_idx = self.indices[data_dim].index
+            if isinstance(col_idx, CompartmentContainer):
+                columns = col_idx.get_labels()
+            else:
+                columns = col_idx
+        else:
+            columns = None
+        return pd.DataFrame(
+            index=self.indices["time"].index, data=self.data, columns=columns
+        )
+
+
+def _squash_to_slice(idx_arr):
+    # Flat, contiguous
+    if (idx_arr[-1] - idx_arr[0]) == (len(idx_arr) - 1):
+        if (idx_arr == np.arange(idx_arr[0], idx_arr[-1] + 1)).all():
+            return slice(idx_arr[0], idx_arr[-1] + 1)
+    # Stepped slice
+    diffs = np.diff(idx_arr)
+    if len(set(diffs)) == 1:
+        step = diffs[0]
+        return slice(idx_arr[0], idx_arr[-1] + step, step)
+
+    return idx_arr

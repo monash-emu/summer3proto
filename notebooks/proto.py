@@ -4,6 +4,7 @@ from typing import Optional
 from warnings import warn
 from copy import deepcopy
 
+
 import jax
 from jax import numpy as jnp
 import numpy as np
@@ -33,7 +34,7 @@ class Stratification:
             return (self, [ki for ki in k])
 
     def categories(self):
-        return [[(self, [stratum])] for stratum in self.strata]
+        return CategoryGroup([Category((self, [stratum])) for stratum in self.strata])
 
     # +++
     # Provide an easy way to obtain StratSpec - maybe getitem?
@@ -56,7 +57,7 @@ class Compartment:
         a_strats = {strat: stratum for (strat, stratum) in self.strata}
         b_strats = {strat: stratum for (strat, stratum) in other.strata}
         for strat in strats:
-            if a_strats[strat] != b_strats[strat]:
+            if a_strats.get(strat) != b_strats.get(strat):
                 return False
         return True
 
@@ -70,7 +71,10 @@ def validate_qspec(qspec: list[StratSpec]):
     if isinstance(qspec, list):
         return qspec
     elif isinstance(qspec, tuple):
-        return [qspec]
+        if isinstance(qspec[0], Stratification):
+            return [qspec]
+        else:
+            return list(qspec)
     raise TypeError("Invalid query specification")
 
 
@@ -139,6 +143,12 @@ class CompartmentContainer:
 
     def __len__(self):
         return len(self.compartments)
+
+    def get_labels(self):
+        def compname(c: Compartment):
+            return "_".join([stratum for (strat, stratum) in c.strata])
+
+        return [compname(c) for c in self.compartments]
 
 
 class CompartmentMap(CompartmentContainer):
@@ -283,6 +293,15 @@ class CompartmentDataContainer(CompartmentContainer):
             qcomp_view.indices,
         )
 
+    def as_managed_array(self) -> "ManagedArray":
+        from managed import ManagedArray, ManagedIndex
+
+        return ManagedArray(
+            self.data,
+            ["compartment"],
+            indices={"compartment": ManagedIndex("compartment", self)},
+        )
+
     def __repr__(self):
         if self.parent == self:
             return (
@@ -313,11 +332,15 @@ def category_idx_reduction(cat_indices: list[np.ndarray], src: jax.Array):
 
 
 def query_cat_reduction(query_cats, comp_data):
+    if isinstance(query_cats, CategoryGroup):
+        query_cats = query_cats.categories
     indices = [comp_data.query(qc).indices for qc in query_cats]
     return category_idx_reduction(indices, comp_data.data)
 
 
-def cat_indices(query_cats, comp_data):
+def get_cat_indices(query_cats, comp_data):
+    if isinstance(query_cats, CategoryGroup):
+        query_cats = [c.traits for c in query_cats.categories]
     indices = [comp_data.query(qc).indices for qc in query_cats]
     return np.array(indices)
 
@@ -397,15 +420,6 @@ def reconcile_broadcast(srcq, destq, cmap, strategy=None):
                 return rec_dest, rec_src, None
 
 
-class CategoryData:
-    def __init__(self, cats, data):
-        self.cats = cats
-        self.data = data
-
-    def __repr__(self):
-        return f"CategoryData:\n{self.cats}\n{self.data}\n"
-
-
 class ActualizedTransitionFlow:
     def __init__(self, flow, src_cmap, dest_cmap, adjustments, apply_func):
         self.flow = flow
@@ -422,9 +436,10 @@ class TransitionFlow:
         self.param = param
         self.adjustments = []
 
-    def actualize(self, cmap, param_key=None):
+    def actualize(self, cmap, param_key=None, adj_param_keys=None):
 
         param_key = param_key or self.param
+        adj_param_keys = adj_param_keys or {}
 
         realised_adjustments = []
 
@@ -433,16 +448,31 @@ class TransitionFlow:
         if adj is not None:
             realised_adjustments.append(adj)
 
+        from managed import CategoryData
+
         def apply_flow(cdatamap, params):
             src_comp_vals = cdatamap.data[src_cmap.indices]
             param = params[param_key]
             if isinstance(param, CategoryData):
-                cidx = cat_indices(param.cats, src_cmap)
+                cidx = get_cat_indices(param.cats, src_cmap)
                 flow_vals = src_comp_vals.at[cidx.T].mul(param.data)
             else:
                 flow_vals = param * src_comp_vals
             for adj in realised_adjustments:
                 flow_vals = flow_vals * adj
+            for i, adj in enumerate(self.adjustments):
+                if i in adj_param_keys:
+                    adj = params[adj_param_keys[i]]
+
+                from managed import ManagedArray
+
+                if isinstance(adj, ManagedArray):
+                    cats = adj.indices["category"].index
+                    cidx = get_cat_indices(cats, src_cmap)
+                    flow_vals = flow_vals.at[cidx.T].mul(adj.data)
+                else:
+                    raise Exception("Unsupported adjustment", adj)
+
             return flow_vals
 
         return ActualizedTransitionFlow(
@@ -471,7 +501,7 @@ class ExitFlow:
             src_comp_vals = cdatamap.data[src_cmap.indices]
             param = params[self.param]
             if isinstance(param, CategoryData):
-                cidx = cat_indices(param.cats, src_cmap)
+                cidx = get_cat_indices(param.cats, src_cmap)
                 flow_vals = src_comp_vals.at[cidx.T].mul(param.data)
             else:
                 flow_vals = params[self.param] * src_comp_vals
@@ -506,3 +536,68 @@ class EntryFlow:
             return flow_vals
 
         return ActualizedEntryFlow(self, dest_cmap, self.adjustments, apply_flow)
+
+
+class Category:
+    def __init__(self, traits: list[StratSpec]):
+        traits = validate_qspec(traits)
+        self.traits = traits
+
+    def __repr__(self):
+        return "Category: " + repr(self.traits)
+
+    # def __eq__(self, other):
+    #    return set(self.strata) == set(other.strata)
+
+    def __hash__(self):
+        return hash(tuple(*(self.traits,)))
+
+    def matches(self, other, traits=None):
+        if isinstance(traits, Stratification):
+            traits = [traits]
+        a_strats = {strat: strata for (strat, strata) in self.traits}
+        b_strats = {strat: strata for (strat, strata) in other.traits}
+        if traits is None:
+            traits = other.traits
+        for trait in traits:
+            if set(a_strats.get(trait)) != set(b_strats.get(trait)):
+                return False
+        return True
+
+    def __add__(self, other):
+        return Category(self.traits + other.traits)
+
+
+class CategoryGroup:
+    def __init__(self, categories: list[Category], indices=None, parent=None):
+        self.categories = categories
+        self.indices = indices or np.arange(len(categories))
+        self.parent = parent or self
+
+    def query(self, q: list[StratSpec]):
+        q = validate_qspec(q)
+        valid_cats = []
+        valid_indices = []
+        for i, cat in enumerate(self.categories):
+            if cat.matches(Category(q)):
+                valid_cats.append(cat)
+                valid_indices.append(i)
+        return CategoryGroup(valid_cats, np.array(valid_indices), self)
+
+    def __iter__(self):
+        return self.categories.__iter__()
+
+    def _product_catgroup(self, other: "CategoryGroup"):
+        categories = []
+        for cat in self.categories:
+            for other_cat in other.categories:
+                categories.append(cat + other_cat)
+        return CategoryGroup(categories)
+
+    def product(self, trait: StratSpec):
+        if isinstance(trait, CategoryGroup):
+            return self._product_catgroup(trait)
+        return CategoryGroup([cat + Category(trait) for cat in self.categories])
+
+    def __repr__(self):
+        return "CategoryGroup\n" + "\n".join([repr(c) for c in self.categories])

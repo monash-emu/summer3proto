@@ -88,18 +88,17 @@ class GraphModel:
 
         def run_model(init_state, params, timesteps):
             def state_update(comp_vals, i):
-                # params["t"] = i
                 model_variables = {"time": i, "compartment_values": comp_vals}
                 dyn_values = cgraphfunc(
                     model_variables=model_variables, parameters=params
                 )
                 hdata = self.cmap.wrap_data(comp_vals)
-                # for k, v in self.dyn_params.items():
-                #    params[k] = v(hdata, params)
 
                 comp_delta = jnp.zeros_like(comp_vals)
+                stored_flows = {}
                 for k, flow in self.actual_flows.items():
                     flow_vals = flow.get_flow_vals(hdata, dyn_values)
+                    stored_flows[k] = flow_vals
                     if hasattr(flow, "src_cmap"):
                         comp_delta = comp_delta.at[flow.src_cmap.indices].subtract(
                             flow_vals
@@ -110,7 +109,7 @@ class GraphModel:
                         )
                 tstep_data = jnp.clip(hdata.data + comp_delta, 0.0)
 
-                return tstep_data, tstep_data
+                return tstep_data, {"compartments": tstep_data, "flows": stored_flows}
 
             final, gathered = lax.scan(
                 state_update, init_state, xs=jnp.arange(timesteps)
