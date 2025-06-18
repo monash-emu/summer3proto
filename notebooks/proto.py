@@ -1,19 +1,29 @@
+from __future__ import annotations
+
 import numpy as np
 import itertools
-from typing import Optional
+from typing import Optional, Sequence, Union
 from warnings import warn
 from copy import deepcopy
+import numpy.typing as npt
 
+from utils import validate_qspec
 
 import jax
 from jax import numpy as jnp
 import numpy as np
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from categories import CategoryGroup
+    from managed import ManagedArray
+
 
 class Stratification:
     def __init__(self, name: str, strata: list[str]):
         self.name = name
-        self.strata = strata
+        self.strata = tuple(strata)
 
     def __repr__(self):
         return f"Stratification: {self.name}"
@@ -21,19 +31,28 @@ class Stratification:
     def __getitem__(self, k):
         if isinstance(k, str):
             if k in self.strata:
-                return (self, [k])
+                return (
+                    self,
+                    tuple(
+                        [
+                            k,
+                        ]
+                    ),
+                )
             else:
                 raise KeyError()
         elif k is Ellipsis:
-            return (self, [strat for strat in self.strata])
+            return (self, tuple([strat for strat in self.strata]))
         else:
             strata = [ki for ki in k]
             for s in strata:
                 if s not in self.strata:
                     raise KeyError()
-            return (self, [ki for ki in k])
+            return (self, tuple(strata))
 
-    def categories(self):
+    def categories(self) -> CategoryGroup:
+        from categories import CategoryGroup, Category
+
         return CategoryGroup([Category((self, [stratum])) for stratum in self.strata])
 
     # +++
@@ -62,20 +81,14 @@ class Compartment:
         return True
 
 
-StratSpec = tuple[Stratification, str] | tuple[Stratification, list[str]] | None
+StratSpec = (
+    tuple[Stratification, str]
+    | tuple[Stratification, list[str]]
+    | tuple[Stratification, tuple[str]]
+    | None
+)
 StratMap = dict[Stratification, StratSpec]
-CompartmentArray = np.ndarray[Compartment]
-
-
-def validate_qspec(qspec: list[StratSpec]):
-    if isinstance(qspec, list):
-        return qspec
-    elif isinstance(qspec, tuple):
-        if isinstance(qspec[0], Stratification):
-            return [qspec]
-        else:
-            return list(qspec)
-    raise TypeError("Invalid query specification")
+CompartmentArray = Sequence[Compartment]
 
 
 class CompartmentContainer:
@@ -84,9 +97,9 @@ class CompartmentContainer:
     def __init__(
         self,
         compartments: CompartmentArray,
-        root: "CompartmentMap" = None,
-        parent: "CompartmentContainer" = None,
-        indices: np.array = None,
+        root: Optional["CompartmentMap"] = None,
+        parent: Optional["CompartmentContainer"] = None,
+        indices: Optional[np.ndarray] = None,
     ):
         self.compartments = np.array(compartments)
         if parent is None and indices is None:
@@ -95,7 +108,7 @@ class CompartmentContainer:
 
         if parent is not None and indices is not None:
             self.parent = parent
-            self.indices = indices
+            self.parent_indices = indices
         else:
             raise Exception("Both or neither of parent and indices must be specified")
 
@@ -105,7 +118,7 @@ class CompartmentContainer:
         compartments = self.compartments[indices]
         return CompartmentContainer(compartments, self.root, self, indices)
 
-    def query(self, traits: list[StratSpec]) -> "CompartmentContainer":
+    def query(self, traits: list[StratSpec]) -> CompartmentContainer:
         traits = validate_qspec(traits)
         qres = []
         indices = []
@@ -138,7 +151,7 @@ class CompartmentContainer:
             return (
                 f"CompartmentContainer view of 0x{id(self.parent)}:\n"
                 + repr(self.compartments)
-                + repr(self.indices)
+                + repr(self.parent_indices)
             )
 
     def __len__(self):
@@ -170,7 +183,7 @@ class CompartmentMap(CompartmentContainer):
 
     def stratify(
         self, strat: Stratification, stratifies: StratSpec = None, in_place=True
-    ):
+    ) -> Stratification:
 
         if stratifies is None:
             stratifies = (self._base_strat, self._base_strat.strata)
@@ -228,7 +241,7 @@ class CompartmentMap(CompartmentContainer):
 
     def rebase(
         self, new_base_strat: Stratification, key, in_place=False
-    ) -> "CompartmentMap":
+    ) -> CompartmentMap:
         new_stratifications = {new_base_strat: None}
 
         for k, v in self.stratifications.items():
@@ -288,12 +301,12 @@ class CompartmentDataContainer(CompartmentContainer):
         return CompartmentDataContainer(
             qcomp_view.compartments,
             self.root,
-            self.data[qcomp_view.indices],
+            self.data[qcomp_view.parent_indices],
             self,
-            qcomp_view.indices,
+            qcomp_view.parent_indices,
         )
 
-    def as_managed_array(self) -> "ManagedArray":
+    def as_managed_array(self) -> ManagedArray:
         from managed import ManagedArray, ManagedIndex
 
         return ManagedArray(
@@ -313,7 +326,7 @@ class CompartmentDataContainer(CompartmentContainer):
             return (
                 f"CompartmentDataContainer view of 0x{id(self.parent)}:\n"
                 f"Compartments:\n{repr(self.compartments)}\n"
-                f"Indices:\n{repr(self.indices)}\n"
+                f"Indices:\n{repr(self.parent_indices)}\n"
                 f"Data:\n{repr(self.data)}\n"
             )
 
@@ -322,44 +335,6 @@ def iter_stratspec(sspec: StratSpec):
     strat, strata = sspec
     for stratum in strata:
         yield (strat, stratum)
-
-
-def category_idx_reduction(cat_indices: list[np.ndarray], src: jax.Array):
-    if len(set([len(c) for c in cat_indices])) == 1:
-        return src[np.array(cat_indices)].sum(axis=1)
-    else:
-        return jnp.array([src[c].sum() for c in cat_indices])
-
-
-def query_cat_reduction(query_cats, comp_data):
-    if isinstance(query_cats, CategoryGroup):
-        query_cats = query_cats.categories
-    indices = [comp_data.query(qc).indices for qc in query_cats]
-    return category_idx_reduction(indices, comp_data.data)
-
-
-def get_cat_indices(query_cats, comp_data):
-    if isinstance(query_cats, CategoryGroup):
-        query_cats = [c.traits for c in query_cats.categories]
-    indices = [comp_data.query(qc).indices for qc in query_cats]
-    return np.array(indices)
-
-
-### Flows
-def strats_for_comp(c):
-    strats = []
-    for strat, stratum in c.strata:
-        strats.append(strat)
-    return list(set(strats))
-
-
-def strats_for_cmap(cmap):
-    src_strats = set()
-    for c in cmap.compartments:
-        cstrats = strats_for_comp(c)
-        for s in cstrats:
-            src_strats.add(s)
-    return list(src_strats)
 
 
 def reconcile_broadcast(srcq, destq, cmap, strategy=None):
@@ -430,11 +405,12 @@ class ActualizedTransitionFlow:
 
 
 class TransitionFlow:
-    def __init__(self, srcq, destq, param):
+    def __init__(self, name, srcq, destq, param):
         self.srcq = validate_qspec(srcq)
         self.destq = validate_qspec(destq)
         self.param = param
         self.adjustments = []
+        self.name = name
 
     def actualize(self, cmap, param_key=None, adj_param_keys=None):
 
@@ -448,10 +424,10 @@ class TransitionFlow:
         if adj is not None:
             realised_adjustments.append(adj)
 
-        from managed import CategoryData
+        from categories import CategoryData, get_cat_indices
 
         def apply_flow(cdatamap, params):
-            src_comp_vals = cdatamap.data[src_cmap.indices]
+            src_comp_vals = cdatamap.data[src_cmap.parent_indices]
             param = params[param_key]
             if isinstance(param, CategoryData):
                 cidx = get_cat_indices(param.cats, src_cmap)
@@ -536,68 +512,3 @@ class EntryFlow:
             return flow_vals
 
         return ActualizedEntryFlow(self, dest_cmap, self.adjustments, apply_flow)
-
-
-class Category:
-    def __init__(self, traits: list[StratSpec]):
-        traits = validate_qspec(traits)
-        self.traits = traits
-
-    def __repr__(self):
-        return "Category: " + repr(self.traits)
-
-    # def __eq__(self, other):
-    #    return set(self.strata) == set(other.strata)
-
-    def __hash__(self):
-        return hash(tuple(*(self.traits,)))
-
-    def matches(self, other, traits=None):
-        if isinstance(traits, Stratification):
-            traits = [traits]
-        a_strats = {strat: strata for (strat, strata) in self.traits}
-        b_strats = {strat: strata for (strat, strata) in other.traits}
-        if traits is None:
-            traits = other.traits
-        for trait in traits:
-            if set(a_strats.get(trait)) != set(b_strats.get(trait)):
-                return False
-        return True
-
-    def __add__(self, other):
-        return Category(self.traits + other.traits)
-
-
-class CategoryGroup:
-    def __init__(self, categories: list[Category], indices=None, parent=None):
-        self.categories = categories
-        self.indices = indices or np.arange(len(categories))
-        self.parent = parent or self
-
-    def query(self, q: list[StratSpec]):
-        q = validate_qspec(q)
-        valid_cats = []
-        valid_indices = []
-        for i, cat in enumerate(self.categories):
-            if cat.matches(Category(q)):
-                valid_cats.append(cat)
-                valid_indices.append(i)
-        return CategoryGroup(valid_cats, np.array(valid_indices), self)
-
-    def __iter__(self):
-        return self.categories.__iter__()
-
-    def _product_catgroup(self, other: "CategoryGroup"):
-        categories = []
-        for cat in self.categories:
-            for other_cat in other.categories:
-                categories.append(cat + other_cat)
-        return CategoryGroup(categories)
-
-    def product(self, trait: StratSpec):
-        if isinstance(trait, CategoryGroup):
-            return self._product_catgroup(trait)
-        return CategoryGroup([cat + Category(trait) for cat in self.categories])
-
-    def __repr__(self):
-        return "CategoryGroup\n" + "\n".join([repr(c) for c in self.categories])

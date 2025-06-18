@@ -118,7 +118,7 @@ class ManagedIndex:
     def query(self, q):
         if isinstance(self.index, CompartmentContainer):
             qres = self.index.query(q)
-            new_subidx, idx_arr = qres, qres.indices
+            new_subidx, idx_arr = qres, qres.parent_indices
         elif isinstance(self.index, pd.Index):
             pdlookup = pd.Series(index=self.index, data=np.arange(len(self.index)))
             qbackref = pdlookup[q]
@@ -127,7 +127,7 @@ class ManagedIndex:
             new_subidx, idx_arr = qbackref.index, np.array(qbackref)
         else:
             raise TypeError(self.index)
-        return ManagedIndex(self.dim, new_subidx), _squash_to_slice(idx_arr)
+        return ManagedIndex(self.dim, new_subidx), squash_to_slice(idx_arr)
 
 
 class ManagedCategoryGroupIndex(ManagedIndex):
@@ -136,7 +136,7 @@ class ManagedCategoryGroupIndex(ManagedIndex):
 
     def query(self, q):
         qres = self.index.query(q)
-        return ManagedCategoryGroupIndex(self.dim, qres, _squash_to_slice(qres.indices))
+        return ManagedCategoryGroupIndex(self.dim, qres, squash_to_slice(qres.indices))
 
     def __repr__(self):
         return f"ManagedCategoryGroupIndex: maps [{self.dim}]\n" + repr(self.index)

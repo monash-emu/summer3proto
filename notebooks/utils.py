@@ -1,9 +1,22 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from categories import Category
+    from managed import ManagedArray
+    from proto import CompartmentContainer, strats_for_cmap, StratSpec
+
 from jax import numpy as jnp
 import numpy as np
-from proto import CompartmentContainer, strats_for_cmap
+
 from datetime import datetime, timedelta
 import pandas as pd
 from numbers import Real
+from typing import Sequence, Union
+import datetime as dt
+
+TimeIndex = Sequence[dt.datetime]
+Indexer = Union[slice, np.ndarray]
 
 
 def _interp_from_ranges(t, x, y, xiranges, yranges):
@@ -27,6 +40,8 @@ class LinearInterpolator:
 
 
 def get_strat_prop_dicts(cmap: CompartmentContainer):
+    # +++ If we ever do actually need this,
+    # move it to a method on CompartmentContainer
     strat_prop_dicts = {
         strat.name: np.empty(len(cmap), dtype=object) for strat in strats_for_cmap(cmap)
     }
@@ -78,7 +93,7 @@ class Epoch:
         """
         return (index - self.ref_date) / self.unit
 
-    def number_to_datetime(self, n: Real) -> datetime:
+    def number_to_datetime(self, n: float) -> datetime:
         """Convert a single number to a datetime
 
         Args:
@@ -101,8 +116,60 @@ class Epoch:
         return (d - self.ref_date) / self.unit
 
 
+def dti_to_epoch(dti: TimeIndex):
+    return Epoch(dti[0], dti[1] - dti[0])
+
+
 def get_category_names(cat_groups):
     return [
         "_".join(["|".join([stratum for stratum in strata]) for strat, strata in cat])
         for cat in cat_groups
     ]
+
+
+def squash_to_slice(idx_arr) -> Indexer:
+    # Flat, contiguous
+    if (idx_arr[-1] - idx_arr[0]) == (len(idx_arr) - 1):
+        if (idx_arr == np.arange(idx_arr[0], idx_arr[-1] + 1)).all():
+            return slice(idx_arr[0], idx_arr[-1] + 1)
+    # Stepped slice
+    diffs = np.diff(idx_arr)
+    if len(set(diffs)) == 1:
+        step = diffs[0]
+        return slice(idx_arr[0], idx_arr[-1] + step, step)
+
+    return idx_arr
+
+
+def validate_qspec(qspec: Union[tuple, list[StratSpec], Category]) -> list[StratSpec]:
+    from categories import Category
+
+    if isinstance(qspec, list):
+        return qspec
+    elif isinstance(qspec, Category):
+        return qspec.traits
+    elif isinstance(qspec, tuple):
+        from proto import Stratification
+
+        if isinstance(qspec[0], Stratification):
+            return [qspec]
+        else:
+            return list(qspec)
+    raise TypeError("Invalid query specification")
+
+
+### Flows
+def strats_for_comp(c):
+    strats = []
+    for strat, stratum in c.strata:
+        strats.append(strat)
+    return list(set(strats))
+
+
+def strats_for_cmap(cmap):
+    src_strats = set()
+    for c in cmap.compartments:
+        cstrats = strats_for_comp(c)
+        for s in cstrats:
+            src_strats.add(s)
+    return list(src_strats)

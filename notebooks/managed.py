@@ -1,11 +1,13 @@
+from __future__ import annotations
+
 from typing import Optional
+from types import ModuleType
+from numbers import Integral, Number
 from jax import numpy as jnp, Array
 import numpy as np
-from proto import CompartmentContainer, get_cat_indices, StratSpec, CategoryGroup
+import proto
 import pandas as pd
-from numbers import Integral, Number
-from typing import Optional
-from utils import get_category_names
+from utils import squash_to_slice, Indexer
 
 
 class ManagedIndex:
@@ -16,37 +18,19 @@ class ManagedIndex:
     def __repr__(self):
         return f"ManagedIndex: maps {self.dim}\n" + repr(self.index)
 
-    def query(self, q):
-        if isinstance(self.index, CompartmentContainer):
+    def query(self, q) -> tuple[ManagedIndex, Indexer]:
+        if isinstance(self.index, proto.CompartmentContainer):
             qres = self.index.query(q)
-            new_subidx, idx_arr = qres, qres.indices
+            new_subidx, idx_arr = qres, qres.parent_indices
         elif isinstance(self.index, pd.Index):
             pdlookup = pd.Series(index=self.index, data=np.arange(len(self.index)))
-            qbackref = pdlookup[q]
+            qbackref = pdlookup.loc[q]
             if isinstance(qbackref, Integral):
-                qbackref = pdlookup[[q]]
+                qbackref = pdlookup.loc[[q]]
             new_subidx, idx_arr = qbackref.index, np.array(qbackref)
         else:
             raise TypeError(self.index)
-        return ManagedIndex(self.dim, new_subidx), _squash_to_slice(idx_arr)
-
-
-class ManagedCategoryGroupIndex(ManagedIndex):
-    def __init__(self, dim: str, index: CategoryGroup):
-        super().__init__(dim, index)
-
-    def query(self, q):
-        qres = self.index.query(q)
-        return ManagedCategoryGroupIndex(self.dim, qres, _squash_to_slice(qres.indices))
-
-    def get_labels(self):
-        def label_for_category(category):
-            return "_".join(["|".join(strata) for strat, strata in category.traits])
-
-        return [label_for_category(cat) for cat in self.index.categories]
-
-    def __repr__(self):
-        return f"ManagedCategoryGroupIndex: maps [{self.dim}]\n" + repr(self.index)
+        return ManagedIndex(self.dim, new_subidx), squash_to_slice(idx_arr)
 
 
 class ManagedArray:
@@ -56,6 +40,7 @@ class ManagedArray:
         dims,
         indices: Optional[dict[str, ManagedIndex]] = None,
         labellers=None,
+        parent_indices=None,
     ):
         if len(dims) != len(data.shape):
             raise ValueError(
@@ -68,6 +53,7 @@ class ManagedArray:
         self._dim_idx = {dim: i for i, dim in enumerate(dims)}
         self.indices = indices or {}
         self.labellers = labellers or {}
+        self.parent_indices = parent_indices
 
     def add_index(self, name, dim, index):
         self.indices[name] = ManagedIndex(dim, index)
@@ -82,7 +68,20 @@ class ManagedArray:
             out_kwargs["indices"] = self.indices.copy()
         if "labellers" not in out_kwargs:
             out_kwargs["labellers"] = self.labellers.copy()
+        if "parent_indices" not in out_kwargs:
+            out_kwargs["parent_indices"] = self.parent_indices
         return ManagedArray(**out_kwargs)
+
+    def simplify(self):
+        out_dims = []
+        out_shape = []
+        for dim, dlen in zip(self.dims, self.shape):
+            if dlen != 1:
+                out_dims.append(dim)
+                out_shape.append(dlen)
+        out_data = self.data.reshape(tuple(out_shape))
+        out_indices = {k: v for k, v in self.indices.items() if v.dim in out_dims}
+        return self.copy_with(data=out_data, dims=out_dims, indices=out_indices)
 
     def transpose(self, dims):
         if set(dims) != set(self.dims):
@@ -189,9 +188,20 @@ class ManagedArray:
     def shape(self):
         return self.data.shape
 
-    def query(self, **kwargs):
+    def query(self, *args, **kwargs):
+        if len(args) == 1 and len(kwargs) == 0:
+            if len(self.indices) == 1:
+                idx_name = list(self.indices)[0]
+            else:
+                raise ValueError("Single argument requires single index")
+            qargs = {idx_name: args[0]}
+        elif len(args) == 0 and len(kwargs) > 0:
+            qargs = kwargs
+        else:
+            raise Exception("Only one of args or kwargs can be supplied")
+
         qindices = []
-        for idx_name, q in kwargs.items():
+        for idx_name, q in qargs.items():
             mindex = self.indices[idx_name]
             di = self._dim_idx[mindex.dim]
             new_subidx, qidx = mindex.query(
@@ -214,18 +224,28 @@ class ManagedArray:
                 new_indices[k] = v
         try:
             out_data = self.data[*slicer]
-            return ManagedArray(out_data, self.dims, new_indices)
+            # +++ Slightly ugly hack to help out all the 1d compartmentarray indexing
+            if len(self.dims) == 1:
+                parent_indices = slicer[0]
+            else:
+                parent_indices = slicer
+            return self.copy_with(
+                data=out_data, indices=new_indices, parent_indices=parent_indices
+            )
         except:
             raise Exception("Unsupported slice styles; try chaining queries")
 
     def __repr__(self):
         return (
             f"ManagedArray\n{self.dims} {self.shape}\n"
-            + f"Indices:\n{self.indices}\n"
+            + f"Indices:\n{list(self.indices)}\n"
             + f"Data:\n{self.data}"
         )
 
-    def sumcats(self, *args, **kwargs) -> "ManagedArray":
+    def sumcats(self, *args, **kwargs) -> ManagedArray:
+
+        from categories import get_cat_indices_list, ManagedCategoryGroupIndex
+
         if (len(args) > 0 and len(kwargs) > 0) or len(args) > 1 or len(kwargs) > 1:
             raise Exception("Only one positional or one kwarg allowed")
         elif len(args) == 1 and len(kwargs) == 0:
@@ -243,49 +263,42 @@ class ManagedArray:
 
         indexer = self.indices[idx_name]
         maps_dim, cat_cmap = indexer.dim, indexer.index
-        cat_indices = get_cat_indices(catgroups, cat_cmap)
+        cat_indices = get_cat_indices_list(catgroups, cat_cmap)
         # cat_names = get_category_names(catgroups)
         dim_idx = self._dim_idx[maps_dim]
 
         if len(set([len(c) for c in cat_indices])) == 1:
+            # Homogenous case - can do this as one op
             slicers = [
                 slice(None) if i != dim_idx else np.array(cat_indices)
                 for i in range(len(self.dims))
             ]
-            # slicers.append(np.array(cat_indices))
+            #
             new_data = self.data[*slicers].sum(axis=dim_idx + 1)
+            out_dims = [d if d != maps_dim else "category" for d in self.dims]
+
         else:
-            new_data = jnp.array(
-                [
-                    self.data[*([slicers] + [c])].sum(axis=dim_idx + 1)
-                    for c in cat_indices
+            # Category slices of differing lengths, need to perform
+            # as separate ops then concatenate into final array
+            cat_data = []
+            for c in cat_indices:
+                slicers = [
+                    slice(None) if i != dim_idx else np.array(c)
+                    for i in range(len(self.dims))
                 ]
-            )
+                cat_data.append(self.data[*slicers].sum(axis=dim_idx))
+            new_data = jnp.array(cat_data)
+            out_dims = ["category"] + [d for d in self.dims if d != maps_dim]
 
-        out_dims = [d if d != maps_dim else "category" for d in self.dims]
+        target_dims = [d if d != maps_dim else "category" for d in self.dims]
 
         out_indices = {
             name: midx for name, midx in self.indices.items() if midx.dim != maps_dim
         }
         out_indices["category"] = ManagedCategoryGroupIndex("category", catgroups)
-        return self.copy_with(data=new_data, dims=out_dims, indices=out_indices)
+        out_ma = self.copy_with(data=new_data, dims=out_dims, indices=out_indices)
 
-        if dim_idx == (len(self.dims) - 1):
-            slicers = [slice() for i in range(len(self.dims) - 1)]
-            if len(set([len(c) for c in cat_indices])) == 1:
-                slicers.append(np.array(cat_indices))
-                new_data = self.data[*slicers].sum(axis=-1)
-            else:
-                new_data = jnp.array(
-                    [self.data[*([slicers] + [c])].sum(axis=-1) for c in cat_indices]
-                )
-        else:
-            raise Exception("Only timecubes supported currently")
-        out_indices = {
-            name: midx for name, midx in self.indices.items() if midx.dim != maps_dim
-        }
-        out_indices["category"] = ManagedCategoryGroupIndex("category", catgroups)
-        return ManagedArray(new_data, ["time", "category"], indices=out_indices)
+        return out_ma.transpose(target_dims)
 
     def sum(self, dims=None, to_dims=None):
         if to_dims is not None:
@@ -314,7 +327,7 @@ class ManagedArray:
                     columns = dim_indexer.get_labels()
                 else:
                     col_idx = self.indices[data_dim].index
-                    if isinstance(col_idx, CompartmentContainer):
+                    if isinstance(col_idx, proto.CompartmentContainer):
                         columns = col_idx.get_labels()
                     else:
                         columns = col_idx
@@ -324,27 +337,3 @@ class ManagedArray:
         return pd.DataFrame(
             index=self.indices["time"].index, data=self.data, columns=columns
         )
-
-
-def _squash_to_slice(idx_arr):
-    # Flat, contiguous
-    if (idx_arr[-1] - idx_arr[0]) == (len(idx_arr) - 1):
-        if (idx_arr == np.arange(idx_arr[0], idx_arr[-1] + 1)).all():
-            return slice(idx_arr[0], idx_arr[-1] + 1)
-    # Stepped slice
-    diffs = np.diff(idx_arr)
-    if len(set(diffs)) == 1:
-        step = diffs[0]
-        return slice(idx_arr[0], idx_arr[-1] + step, step)
-
-    return idx_arr
-
-
-class CategoryData(ManagedArray):
-    def __init__(self, cats: CategoryGroup, data: Array):
-        indexer = ManagedCategoryGroupIndex("category", cats)
-        super().__init__(data=data, dims=["category"], indices={"category": indexer})
-        self.cats = cats
-
-    def __repr__(self):
-        return f"CategoryData:\n{self.cats}\n{self.data}\n"
