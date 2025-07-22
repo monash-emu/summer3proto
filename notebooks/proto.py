@@ -62,6 +62,7 @@ class Stratification:
 class Compartment:
     def __init__(self, strata: list[tuple[Stratification, str]]):
         self.strata = strata
+        self._strata_map = {strat: stratum for (strat, stratum) in self.strata}
 
     def __repr__(self):
         return "Compartment :" + repr(self.strata)
@@ -73,8 +74,8 @@ class Compartment:
         return hash(tuple(*(self.strata,)))
 
     def matches(self, other, strats):
-        a_strats = {strat: stratum for (strat, stratum) in self.strata}
-        b_strats = {strat: stratum for (strat, stratum) in other.strata}
+        a_strats = self._strata_map
+        b_strats = other._strata_map
         for strat in strats:
             if a_strats.get(strat) != b_strats.get(strat):
                 return False
