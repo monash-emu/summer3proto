@@ -307,6 +307,9 @@ class ManagedArray:
             if isinstance(to_dims, str):
                 to_dims = [to_dims]
             dims = [d for d in self.dims if d not in to_dims]
+        elif dims is None:
+            return self.data.sum()
+
         return self._liftreduction("sum", dims=dims)
 
     def to_pandas_df(self):
