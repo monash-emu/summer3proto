@@ -7,30 +7,30 @@ and aggregation while preserving dimension semantics.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Callable
 from types import ModuleType
 from numbers import Integral, Number
 from jax import numpy as jnp, Array
 import numpy as np
 from . import proto
 import pandas as pd
-from .utils import squash_to_slice, Indexer
+from .utils import squash_to_slice, Indexer, get_rolling_reduction
 
 
 class ManagedIndex:
     """An index that maps to a specific dimension in a ManagedArray.
-    
+
     ManagedIndex associates an index (either pandas Index or CompartmentContainer)
     with a dimension name, enabling labeled access to array data.
-    
+
     Attributes:
         dim (str): The dimension name this index maps to.
         index (pd.Index | proto.CompartmentContainer): The underlying index data.
     """
-    
+
     def __init__(self, dim, index):
         """Initialize a ManagedIndex.
-        
+
         Args:
             dim (str): The dimension name this index maps to.
             index (pd.Index | proto.CompartmentContainer): The index data structure.
@@ -40,7 +40,7 @@ class ManagedIndex:
 
     def __repr__(self):
         """Return string representation of the ManagedIndex.
-        
+
         Returns:
             str: Formatted string showing dimension and index details.
         """
@@ -48,16 +48,16 @@ class ManagedIndex:
 
     def query(self, q) -> tuple[ManagedIndex, Indexer]:
         """Query the index to create a subset.
-        
+
         Args:
             q: Query specification. Format depends on index type:
                 - For pd.Index: list of values to select
                 - For CompartmentContainer: StratSpec query
-        
+
         Returns:
             tuple[ManagedIndex, Indexer]: A new ManagedIndex with the subset
                 and an indexer (slice or array) for the original data.
-                
+
         Raises:
             TypeError: If the index type is not supported.
         """
@@ -77,12 +77,12 @@ class ManagedIndex:
 
 class ManagedArray:
     """A multi-dimensional array with labeled dimensions and indices.
-    
+
     ManagedArray provides a higher-level interface for working with multi-dimensional
     arrays where each dimension has a name and can be associated with indices for
     labeled access. Supports arithmetic operations, querying, aggregation, and
     dimension manipulation while preserving semantic meaning.
-    
+
     Attributes:
         data (jnp.ndarray): The underlying JAX array data.
         dims (list[str]): Names of the dimensions in order.
@@ -91,7 +91,7 @@ class ManagedArray:
         parent_indices: Indices into a parent array if this is a view.
         shape (tuple[int, ...]): Shape of the underlying data array.
     """
-    
+
     def __init__(
         self,
         data,
@@ -101,14 +101,14 @@ class ManagedArray:
         parent_indices=None,
     ):
         """Initialize a ManagedArray.
-        
+
         Args:
             data (jnp.ndarray): The array data.
             dims (list[str]): Dimension names, must match data.ndim.
             indices (dict[str, ManagedIndex], optional): Named indices for dimensions.
             labellers (dict, optional): Functions for generating dimension labels.
             parent_indices (optional): Parent array indices if this is a view.
-            
+
         Raises:
             ValueError: If len(dims) doesn't match data.ndim.
         """
@@ -127,7 +127,7 @@ class ManagedArray:
 
     def add_index(self, name, dim, index):
         """Add a named index for a dimension.
-        
+
         Args:
             name (str): Name for the index.
             dim (str): Dimension name the index maps to.
@@ -137,11 +137,11 @@ class ManagedArray:
 
     def copy_with(self, **kwargs):
         """Create a copy with optionally modified attributes.
-        
+
         Args:
             **kwargs: Attributes to override in the copy. If not provided,
                      the current values are copied.
-                     
+
         Returns:
             ManagedArray: A new ManagedArray instance.
         """
@@ -160,7 +160,7 @@ class ManagedArray:
 
     def simplify(self):
         """Remove dimensions of size 1 from the array.
-        
+
         Returns:
             ManagedArray: A new array with singleton dimensions removed.
         """
@@ -176,14 +176,14 @@ class ManagedArray:
 
     def transpose(self, dims):
         """Transpose the array to a new dimension order.
-        
+
         Args:
             dims (list[str]): New dimension order. Must contain exactly
                              the same dimensions as the current array.
-                             
+
         Returns:
             ManagedArray: A new array with dimensions reordered.
-            
+
         Raises:
             Exception: If dims doesn't match current dimensions exactly.
         """
@@ -194,12 +194,12 @@ class ManagedArray:
 
     def expand(self, dim, index=-1):
         """Add a new dimension of size 1 to the array.
-        
+
         Args:
             dim (str): Name for the new dimension.
-            index (int, optional): Position to insert the dimension. 
+            index (int, optional): Position to insert the dimension.
                                  -1 means append to the end.
-                                 
+
         Returns:
             ManagedArray: A new array with the added dimension.
         """
@@ -216,13 +216,13 @@ class ManagedArray:
 
     def reconcile(self, other):
         """Reconcile dimensions between this array and another for broadcasting.
-        
+
         Expands both arrays to have the same set of dimensions by adding
         singleton dimensions where needed.
-        
+
         Args:
             other (ManagedArray): The other array to reconcile with.
-            
+
         Returns:
             tuple[ManagedArray, ManagedArray]: Both arrays expanded to have
                                               the same dimensions.
@@ -241,14 +241,14 @@ class ManagedArray:
 
     def _lop(self, other, op):
         """Apply a left binary operation.
-        
+
         Args:
             other (Number | ManagedArray): Right operand.
             op (callable): Binary operation function.
-            
+
         Returns:
             ManagedArray: Result of the operation.
-            
+
         Raises:
             TypeError: If other is not a supported type.
         """
@@ -265,14 +265,14 @@ class ManagedArray:
 
     def _rop(self, other, op):
         """Apply a right binary operation.
-        
+
         Args:
             other (Number): Left operand.
             op (callable): Binary operation function.
-            
+
         Returns:
             ManagedArray: Result of the operation.
-            
+
         Raises:
             TypeError: If other is not a Number.
         """
@@ -283,10 +283,10 @@ class ManagedArray:
 
     def __mul__(self, other):
         """Element-wise multiplication.
-        
+
         Args:
             other (Number | ManagedArray): Right operand.
-            
+
         Returns:
             ManagedArray: Result of multiplication.
         """
@@ -294,10 +294,10 @@ class ManagedArray:
 
     def __rmul__(self, other):
         """Right multiplication (other * self).
-        
+
         Args:
             other (Number): Left operand.
-            
+
         Returns:
             ManagedArray: Result of multiplication.
         """
@@ -305,10 +305,10 @@ class ManagedArray:
 
     def __add__(self, other):
         """Element-wise addition.
-        
+
         Args:
             other (Number | ManagedArray): Right operand.
-            
+
         Returns:
             ManagedArray: Result of addition.
         """
@@ -316,10 +316,10 @@ class ManagedArray:
 
     def __radd__(self, other):
         """Right addition (other + self).
-        
+
         Args:
             other (Number): Left operand.
-            
+
         Returns:
             ManagedArray: Result of addition.
         """
@@ -330,10 +330,10 @@ class ManagedArray:
 
     def __sub__(self, other):
         """Element-wise subtraction.
-        
+
         Args:
             other (Number | ManagedArray): Right operand.
-            
+
         Returns:
             ManagedArray: Result of subtraction.
         """
@@ -341,10 +341,10 @@ class ManagedArray:
 
     def __rsub__(self, other):
         """Right subtraction (other - self).
-        
+
         Args:
             other (Number): Left operand.
-            
+
         Returns:
             ManagedArray: Result of subtraction.
         """
@@ -354,10 +354,10 @@ class ManagedArray:
 
     def _reduce_dims(self, dims=None):
         """Prepare dimensions for reduction operations.
-        
+
         Args:
             dims (str | list[str] | None): Dimensions to reduce over.
-            
+
         Returns:
             tuple: (axis_indices, remaining_dims) for the reduction.
         """
@@ -374,11 +374,11 @@ class ManagedArray:
 
     def _liftreduction(self, op, dims=None):
         """Apply a reduction operation over specified dimensions.
-        
+
         Args:
             op (str): Name of the reduction operation (e.g., 'sum', 'mean').
             dims (str | list[str] | None): Dimensions to reduce over.
-            
+
         Returns:
             ManagedArray | scalar: Result of the reduction.
         """
@@ -401,7 +401,7 @@ class ManagedArray:
     @property
     def shape(self):
         """Shape of the underlying data array.
-        
+
         Returns:
             tuple[int, ...]: The shape tuple.
         """
@@ -409,14 +409,14 @@ class ManagedArray:
 
     def query(self, *args, **kwargs):
         """Query the array using named indices.
-        
+
         Args:
             *args: Single positional argument for single-index arrays.
             **kwargs: Named index queries (index_name=query_spec).
-            
+
         Returns:
             ManagedArray: A new array with the queried subset.
-            
+
         Raises:
             ValueError: If single arg used with multi-index array.
             Exception: If both args and kwargs provided, or unsupported slice.
@@ -469,7 +469,7 @@ class ManagedArray:
 
     def __repr__(self):
         """Return string representation of the ManagedArray.
-        
+
         Returns:
             str: Formatted string showing dimensions, shape, indices, and data.
         """
@@ -481,15 +481,15 @@ class ManagedArray:
 
     def sumcats(self, *args, **kwargs) -> ManagedArray:
         """Sum over category groups to create category aggregations.
-        
+
         Args:
             *args: Category groups for single-index arrays.
             **kwargs: Named category groups (index_name=category_groups).
-            
+
         Returns:
             ManagedArray: New array with categories summed and replaced
                          with a 'category' dimension.
-                         
+
         Raises:
             Exception: If argument format is invalid.
         """
@@ -552,16 +552,16 @@ class ManagedArray:
 
     def sum(self, dims=None, to_dims=None):
         """Sum over specified dimensions.
-        
+
         Args:
             dims (str | list[str] | None): Dimensions to sum over.
-            to_dims (str | list[str] | None): Dimensions to preserve 
+            to_dims (str | list[str] | None): Dimensions to preserve
                                             (alternative to dims).
-                                            
+
         Returns:
             ManagedArray | scalar: Result of summation. Returns scalar
                                   if all dimensions are summed.
-                                  
+
         Raises:
             Exception: If both dims and to_dims are provided.
         """
@@ -575,15 +575,30 @@ class ManagedArray:
             return self.data.sum()
         return self._liftreduction("sum", dims=dims)
 
+    def rolling(self, window: int, reduction_func: Callable) -> ManagedArray:
+        """Perform a rolling reduction over the the first dimension, of length (window), using reduction_func
+        The following would be equivalent to pd.DataFrame.rolling(7).sum()
+        : ma.rolling(7, jnp.sum)
+
+        Args:
+            window: Length of window to
+            reduction_func: Callable taking a single (jax) array argument
+
+        Returns:
+            ManagedArray of same indices as original, but with rolling function applied
+        """
+        reduced_data = get_rolling_reduction(reduction_func, window)(self.data)
+        return self.copy_with(data=reduced_data)
+
     def to_pandas_df(self):
         """Convert to a pandas DataFrame.
-        
+
         Only supports 1D and 2D arrays. For 2D arrays, uses dimension indices
         and labellers to create appropriate column names.
-        
+
         Returns:
             pd.DataFrame: DataFrame representation of the array.
-            
+
         Raises:
             Exception: If array has more than 2 dimensions.
         """

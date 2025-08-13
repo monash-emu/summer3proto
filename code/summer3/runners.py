@@ -45,7 +45,7 @@ class CompartmentalModelRunner:
             self._time_idx = epoch.index_to_dti(np.arange(0, timesteps))
 
     def run(self, init_state, params):
-        gathered_res = self._run_func(init_state, params, self.timesteps)
+        gathered_res = self._run_func(init_state, params)
         flow_outputs = gathered_res["flows"]
         compartment_outputs = gathered_res["compartments"]
         computed_values = gathered_res["computed_values"]
@@ -130,7 +130,7 @@ class CompartmentalModel:
         cgraphfunc = cgraph.get_callable(output_all=True)
         computed_values = computed_values or []
 
-        def run_model(init_state, params, timesteps):
+        def run_model(init_state, params):
             def state_update(comp_vals, i):
                 hdata = self.cmap.wrap_data(comp_vals)
                 hdata = hdata.as_managed_array()
@@ -206,7 +206,7 @@ class CompartmentalModelODERunner:
             self._time_idx = epoch.index_to_dti(np.arange(0, timesteps))
 
     def run(self, init_state, params):
-        gathered_res = self._run_func(init_state, params, self.timesteps)
+        gathered_res = self._run_func(init_state, params)
         flow_outputs = gathered_res["flows"]
         compartment_outputs = gathered_res["compartments"]
         computed_values = gathered_res["computed_values"]
@@ -334,7 +334,9 @@ class CompartmentalModelODE:
             term = dfx.ODETerm(vector_field)
             solver = dfx.Dopri5()  # cust
             saveat = dfx.SaveAt(ts=jnp.arange(timesteps))
-            stepsize_controller = dfx.PIDController(rtol=1e-5, atol=1e-5, dtmax=1.0)
+            stepsize_controller = dfx.PIDController(
+                rtol=1e-5, atol=1e-5
+            )  # , dtmax=1.0)
 
             adjoint = dfx.RecursiveCheckpointAdjoint()
             # adjoint = diffrax.ForwardMode()

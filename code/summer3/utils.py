@@ -1,12 +1,13 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
+from typing import Callable
 
 if TYPE_CHECKING:
     from .categories import Category
     from .managed import ManagedArray
     from .proto import CompartmentContainer, strats_for_cmap, StratSpec
 
-from jax import numpy as jnp
+from jax import numpy as jnp, Array
 import numpy as np
 
 from datetime import datetime, timedelta
@@ -173,3 +174,39 @@ def strats_for_cmap(cmap):
         for s in cstrats:
             src_strats.add(s)
     return list(src_strats)
+
+
+def _rolling_index(a: jnp.ndarray, window: int):
+    idx = jnp.arange(len(a) - window + 1)[:, None] + jnp.arange(window)[None, :]
+    return a[idx]
+
+
+def get_rolling_reduction(func: callable, window: int) -> Callable[[Array], Array]:
+    """Build a function that computes a reduction function 'func' over each
+    rolling window of length 'window'
+
+    Reduction functions are those that take an array as input and return a scalar,
+    (or in general reduce array axes to scalar values), such as jnp.mean, jnp.max etc
+
+    This is designed to operate like pandas.Series.rolling (with its default
+    window parameters)
+
+    Args:
+        func: The reduction function to call; must be jax jittable
+        window: The window length
+
+    Returns:
+        A function over a 1d array that returns an array of the same shape, but with
+        the rolling reduction applied
+
+    """
+
+    def rolling_func(x):
+        out_arr = jnp.empty_like(x)
+        windowed = _rolling_index(x, window)
+        agg = func(windowed, axis=1)
+        out_arr = out_arr.at[:window].set(jnp.nan)
+        out_arr = out_arr.at[window - 1 :].set(agg)
+        return out_arr
+
+    return rolling_func
