@@ -7,7 +7,7 @@ from warnings import warn
 from copy import deepcopy
 import numpy.typing as npt
 
-from utils import validate_qspec
+from .utils import validate_qspec
 
 import jax
 from jax import numpy as jnp
@@ -16,8 +16,8 @@ import numpy as np
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from categories import CategoryGroup
-    from managed import ManagedArray
+    from .categories import CategoryGroup
+    from .managed import ManagedArray
 
 
 class Stratification:

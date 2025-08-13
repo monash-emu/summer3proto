@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from typing import Iterable
-from proto import *
-from managed import *
+from .proto import *
+from .managed import *
 
-from utils import squash_to_slice, validate_qspec
+from .utils import squash_to_slice, validate_qspec
 
 
 class CategoryData(ManagedArray):

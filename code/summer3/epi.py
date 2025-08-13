@@ -1,6 +1,6 @@
 import datetime as dt
-from runners import *
-from utils import TimeIndex, dti_to_epoch, strats_for_cmap
+from .runners import *
+from .utils import TimeIndex, dti_to_epoch, strats_for_cmap
 
 
 class CompartmentalEpiModel:

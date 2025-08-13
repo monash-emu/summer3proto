@@ -1,10 +1,10 @@
 from typing import Optional
-from proto import *
-from managed import ManagedArray, ManagedIndex
-from categories import *
+from .proto import *
+from .managed import ManagedArray, ManagedIndex
+from .categories import *
 from jax import lax, jit, grad, make_jaxpr
 import jax
-from utils import Epoch
+from .utils import Epoch
 import pandas as pd
 import diffrax as dfx
 
@@ -330,7 +330,7 @@ class CompartmentalModelODE:
                     )
             return comp_delta
 
-        def run_model(init_state, params, timesteps):
+        def run_model(init_state, params):
             term = dfx.ODETerm(vector_field)
             solver = dfx.Dopri5()  # cust
             saveat = dfx.SaveAt(ts=jnp.arange(timesteps))
@@ -379,7 +379,7 @@ class CompartmentalModelODE:
             # }
 
         if jit:
-            run_model = jax.jit(run_model, static_argnames=["timesteps"])
+            run_model = jax.jit(run_model)
 
         return CompartmentalModelODERunner(
             self,

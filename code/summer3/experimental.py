@@ -1,10 +1,10 @@
 from jax import numpy as jnp
 import numpy as np
-from proto import CompartmentContainer, get_cat_indices, StratSpec, CategoryGroup
+from .proto import CompartmentContainer, get_cat_indices, StratSpec, CategoryGroup
 import pandas as pd
 from numbers import Integral
 from typing import Optional
-from utils import get_category_names
+from .utils import get_category_names
 
 
 class LA:

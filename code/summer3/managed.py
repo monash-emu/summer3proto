@@ -5,9 +5,9 @@ from types import ModuleType
 from numbers import Integral, Number
 from jax import numpy as jnp, Array
 import numpy as np
-import proto
+from . import proto
 import pandas as pd
-from utils import squash_to_slice, Indexer
+from .utils import squash_to_slice, Indexer
 
 
 class ManagedIndex:
