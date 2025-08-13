@@ -2,9 +2,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from categories import Category
-    from managed import ManagedArray
-    from proto import CompartmentContainer, strats_for_cmap, StratSpec
+    from .categories import Category
+    from .managed import ManagedArray
+    from .proto import CompartmentContainer, strats_for_cmap, StratSpec
 
 from jax import numpy as jnp
 import numpy as np
@@ -142,14 +142,14 @@ def squash_to_slice(idx_arr) -> Indexer:
 
 
 def validate_qspec(qspec: Union[tuple, list[StratSpec], Category]) -> list[StratSpec]:
-    from categories import Category
+    from .categories import Category
 
     if isinstance(qspec, list):
         return qspec
     elif isinstance(qspec, Category):
         return qspec.traits
     elif isinstance(qspec, tuple):
-        from proto import Stratification
+        from .proto import Stratification
 
         if isinstance(qspec[0], Stratification):
             return [qspec]

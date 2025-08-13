@@ -51,7 +51,7 @@ class Stratification:
             return (self, tuple(strata))
 
     def categories(self) -> CategoryGroup:
-        from categories import CategoryGroup, Category
+        from .categories import CategoryGroup, Category
 
         return CategoryGroup([Category((self, [stratum])) for stratum in self.strata])
 
@@ -307,7 +307,7 @@ class CompartmentDataContainer(CompartmentContainer):
         )
 
     def as_managed_array(self) -> ManagedArray:
-        from managed import ManagedArray, ManagedIndex
+        from .managed import ManagedArray, ManagedIndex
 
         return ManagedArray(
             self.data,
@@ -424,7 +424,7 @@ class TransitionFlow:
         if adj is not None:
             realised_adjustments.append(adj)
 
-        from categories import CategoryData, get_cat_indices
+        from .categories import CategoryData, get_cat_indices
 
         def apply_flow(cdatamap, params):
             src_comp_vals = cdatamap.data[src_cmap.parent_indices]
@@ -440,7 +440,7 @@ class TransitionFlow:
                 if i in adj_param_keys:
                     adj = params[adj_param_keys[i]]
 
-                from managed import ManagedArray
+                from .managed import ManagedArray
 
                 if isinstance(adj, ManagedArray):
                     cats = adj.indices["category"].index
