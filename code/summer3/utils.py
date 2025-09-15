@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from typing import Callable
+from typing import Callable, Container
 
 if TYPE_CHECKING:
     from .categories import Category
@@ -181,7 +181,7 @@ def _rolling_index(a: jnp.ndarray, window: int):
     return a[idx]
 
 
-def get_rolling_reduction(func: callable, window: int) -> Callable[[Array], Array]:
+def get_rolling_reduction(func: Callable, window: int) -> Callable[[Array], Array]:
     """Build a function that computes a reduction function 'func' over each
     rolling window of length 'window'
 
@@ -210,3 +210,24 @@ def get_rolling_reduction(func: callable, window: int) -> Callable[[Array], Arra
         return out_arr
 
     return rolling_func
+
+
+def get_unique_keyname(base_name: str, container: Container, namei=0) -> str:
+    """Get the first valid integer appended name that is not already contained
+    in container
+
+    Used to generate unique keys for M:N mappings
+
+    Args:
+        base_name: Unadorned original key
+        container: Key store
+        namei: Current appended integer
+
+    Returns:
+        Key unique within container
+    """
+    name = f"{base_name}_{namei}"
+    if name in container:
+        return get_unique_keyname(base_name, container, namei + 1)
+    else:
+        return name
