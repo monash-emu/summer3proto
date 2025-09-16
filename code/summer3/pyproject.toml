@@ -1,0 +1,18 @@
+[project]
+name = "summer3"
+version = "0.2a"
+authors = [
+    {name = "David Shipman", email= "david.shipman@monash.edu"}
+]
+requires-python = ">=3.10"
+dependencies = [
+    "jax",
+    "jaxlib",
+    "diffrax",
+    "pandas"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+

@@ -242,7 +242,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/d1/9a/937038f3efc70871fb26b0ee6148efcfcfb96643c517c2aaddd7ed07ad76/wadler_lindig-0.1.6-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b2/ea/9554e5fb78eda4dbc9e9ccaf23034166fe3e9ea9af82ea6204b9578434bc/xarray-2025.7.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/17/8b/ed2f0f49385c3d7739cd4699954add26e8f09a372a0c3f04f2bde32fcea2/xarray_einstats-0.9.1-py3-none-any.whl
-      - pypi: ./code
+      - pypi: ./code/summer3
+      - pypi: ./code/tbh
   test:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -488,7 +489,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/8d/96/04e7b441807b26b794da5b11e59ed7f83b2cf8af202bd7eba8ad2fa6046e/wadler_lindig-0.1.7-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b2/ea/9554e5fb78eda4dbc9e9ccaf23034166fe3e9ea9af82ea6204b9578434bc/xarray-2025.7.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/17/8b/ed2f0f49385c3d7739cd4699954add26e8f09a372a0c3f04f2bde32fcea2/xarray_einstats-0.9.1-py3-none-any.whl
-      - pypi: ./code
+      - pypi: ./code/summer3
+      - pypi: ./code/tbh
 packages:
 - conda: https://conda.anaconda.org/conda-forge/win-64/_openmp_mutex-4.5-2_gnu.conda
   build_number: 8
@@ -4173,7 +4175,7 @@ packages:
   - pkg:pypi/stack-data?source=hash-mapping
   size: 26988
   timestamp: 1733569565672
-- pypi: ./code
+- pypi: ./code/summer3
   name: summer3
   version: 0.2a0
   sha256: ce26bfbe9432efce5f9a7598c16af5673d1db7a2a2f6ba2b7b9dc12180edad63
@@ -4182,6 +4184,12 @@ packages:
   - jaxlib
   - diffrax
   - pandas
+  requires_python: '>=3.10'
+  editable: true
+- pypi: ./code/tbh
+  name: tbh
+  version: 0.1.0
+  sha256: 3896c73d8c0844519b8854ef50e1b2144919e5517d1615130ec39b115fdcaca2
   requires_python: '>=3.10'
   editable: true
 - conda: https://conda.anaconda.org/conda-forge/noarch/terminado-0.18.1-pyh5737063_0.conda

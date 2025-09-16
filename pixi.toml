@@ -18,7 +18,8 @@ pygraphviz = ">=1.14,<2"
 plotly = ">=6.3.0,<7"
 
 [pypi-dependencies]
-summer3 = { path = "./code", editable = true }
+summer3 = { path = "./code/summer3", editable = true }
+tbh = { path = "./code/tbh", editable = true}
 computegraph = { git = "https://github.com/monash-emu/computegraph.git", rev = "c425e3ba4632b8b8f8a622d381390dba25637089"}
 numpy = ">=2.2.0,<2.3"
 pandas = ">=2.2.3,<2.4"
