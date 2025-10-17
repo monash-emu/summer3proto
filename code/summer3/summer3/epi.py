@@ -15,7 +15,7 @@ class CompartmentalEpiModel:
 
     def run(self, params: dict[str, float]):
         istate = build_istate(self.cmap, self.base_pops, self.pop_splits)
-        cmodel = CompartmentalModelODE(self.cmap, self.flows)
+        cmodel = CompartmentatelModelODE(self.cmap, self.flows)
         runner = cmodel.get_runner(len(self.times), dti_to_epoch(self.times))
         return runner.run(istate.data, params)
 

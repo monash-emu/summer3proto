@@ -7,7 +7,7 @@ from warnings import warn
 from copy import deepcopy
 import numpy.typing as npt
 
-from .utils import validate_qspec
+from .utils import validate_qspec, strats_for_cmap
 
 import jax
 from jax import numpy as jnp
@@ -50,10 +50,12 @@ class Stratification:
                     raise KeyError()
             return (self, tuple(strata))
 
-    def categories(self) -> CategoryGroup:
+    def categories(self, strata=None) -> CategoryGroup:
         from .categories import CategoryGroup, Category
 
-        return CategoryGroup([Category((self, [stratum])) for stratum in self.strata])
+        if strata is None:
+            strata = self.strata
+        return CategoryGroup([Category((self, [stratum])) for stratum in strata])
 
     # +++
     # Provide an easy way to obtain StratSpec - maybe getitem?
@@ -137,6 +139,9 @@ class CompartmentContainer:
         return CompartmentContainer(np.array(qres), self.root, self, np.array(indices))
 
     def wrap_data(self, data):
+        assert len(data) == len(
+            self.compartments
+        ), "Data must be of same shape as CompartmentMap"
         return CompartmentDataContainer(self.compartments, self, data)
 
     def zeros(self, lib=jnp):
@@ -230,6 +235,7 @@ class CompartmentMap(CompartmentContainer):
             self.compartments = np.array(out_comps)
             self.stratifications[strat] = stratifies
             self.remappings[strat] = remapped_comps
+            self.parent_indices = np.arange(len(self.compartments))
         else:
             stratifications = self.stratifications.copy()
             stratifications[strat] = stratifies
@@ -414,7 +420,7 @@ class TransitionFlow:
 
     def actualize(self, cmap, param_key=None, adj_param_keys=None):
 
-        param_key = param_key or self.param
+        # param_key = param_key or self.param
         adj_param_keys = adj_param_keys or {}
 
         realised_adjustments = []
@@ -428,7 +434,10 @@ class TransitionFlow:
 
         def apply_flow(cdatamap, params):
             src_comp_vals = cdatamap.data[src_cmap.parent_indices]
-            param = params[param_key]
+            if param_key is None:
+                param = self.param
+            else:
+                param = params[param_key]
             if isinstance(param, CategoryData):
                 cidx = get_cat_indices(param.cats, src_cmap)
 
@@ -472,22 +481,52 @@ class ActualizedExitFlow:
 
 
 class ExitFlow:
-    def __init__(self, srcq, param):
+    def __init__(self, name, srcq, param):
         self.srcq = validate_qspec(srcq)
         self.param = param
         self.adjustments = []
+        self.name = name
 
-    def actualize(self, cmap):
+    def actualize(self, cmap, param_key=None, adj_param_keys=None):
         src_cmap = cmap.query(self.srcq)
 
+        adj_param_keys = adj_param_keys or {}
+
+        from .categories import CategoryData, get_cat_indices
+
         def apply_flow(cdatamap, params):
-            src_comp_vals = cdatamap.data[src_cmap.indices]
-            param = params[self.param]
+            src_comp_vals = cdatamap.data[src_cmap.parent_indices]
+
+            if param_key is None:
+                param = self.param
+            else:
+                param = params[param_key]
             if isinstance(param, CategoryData):
                 cidx = get_cat_indices(param.cats, src_cmap)
-                flow_vals = src_comp_vals.at[cidx.T].mul(param.data)
+
+                # Need to guarantee unique indices for gradients to work
+                # For most use cases this should probably be fine - where it's not we may need to split this out into
+                # multiple ops, which we already do in other special cases
+                assert cidx.size == np.unique(cidx).size
+                flow_vals = src_comp_vals.at[cidx.T].mul(
+                    param.data, unique_indices=True
+                )
             else:
-                flow_vals = params[self.param] * src_comp_vals
+                flow_vals = param * src_comp_vals
+
+            for i, adj in enumerate(self.adjustments):
+                if i in adj_param_keys:
+                    adj = params[adj_param_keys[i]]
+
+                from .managed import ManagedArray
+
+                if isinstance(adj, ManagedArray):
+                    cats = adj.indices["category"].index
+                    cidx = get_cat_indices(cats, src_cmap)
+                    flow_vals = flow_vals.at[cidx.T].mul(adj.data)
+                else:
+                    raise Exception("Unsupported adjustment", adj)
+
             return flow_vals
 
         return ActualizedExitFlow(self, src_cmap, self.adjustments, apply_flow)

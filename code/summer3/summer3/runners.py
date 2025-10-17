@@ -12,14 +12,21 @@ from computegraph import ComputeGraph
 from computegraph.types import GraphObject
 
 
-def flow_labeller(flowres: ManagedArray):
-    return [
-        "->".join([src, dest])
-        for src, dest in zip(
-            flowres.indices["source"].index.get_labels(),
-            flowres.indices["dest"].index.get_labels(),
-        )
-    ]
+def transition_flow_labeller(flowres: ManagedArray):
+    if "source" in flowres.indices and "dest" in flowres.indices:
+        return [
+            "->".join([src, dest])
+            for src, dest in zip(
+                flowres.indices["source"].index.get_labels(),
+                flowres.indices["dest"].index.get_labels(),
+            )
+        ]
+    elif "source" in flowres.indices:
+        return flowres.indices["source"].index.get_labels()
+    elif "dest" in flowres.indices:
+        return flowres.indices["dest"].index.get_labels()
+    else:
+        raise Exception("No valid indices found in flow result")
 
 
 class CompartmentalModelRunner:
@@ -205,8 +212,9 @@ class CompartmentalModelODERunner:
         else:
             self._time_idx = epoch.index_to_dti(np.arange(0, timesteps))
 
-    def run(self, init_state, params):
-        gathered_res = self._run_func(init_state, params)
+    def run(self, init_state, params, solver_args=None):
+        solver_args = solver_args or {}
+        gathered_res = self._run_func(init_state, params, **solver_args)
         flow_outputs = gathered_res["flows"]
         compartment_outputs = gathered_res["compartments"]
         computed_values = gathered_res["computed_values"]
@@ -222,23 +230,21 @@ class CompartmentalModelODERunner:
             },
         )
 
-        flow_data = {
-            flow_key: ManagedArray(
-                flow_data,
+        flow_data = {}
+
+        for flow_key, data in flow_outputs.items():
+            actual_flow = self.actual_flows[flow_key]
+            indices = {"time": ManagedIndex("time", self._time_idx)}
+            if hasattr(actual_flow, "src_cmap"):
+                indices["source"] = ManagedIndex("compartment", actual_flow.src_cmap)
+            if hasattr(actual_flow, "dest_cmap"):
+                indices["dest"] = ManagedIndex("compartment", actual_flow.dest_cmap)
+            flow_data[flow_key] = ManagedArray(
+                data,
                 dims=["time", "compartment"],
-                indices={
-                    "time": ManagedIndex("time", self._time_idx),
-                    "source": ManagedIndex(
-                        "compartment", self.actual_flows[flow_key].src_cmap
-                    ),
-                    "dest": ManagedIndex(
-                        "compartment", self.actual_flows[flow_key].dest_cmap
-                    ),
-                },
-                labellers={"compartment": flow_labeller},
+                indices=indices,
+                labellers={"compartment": transition_flow_labeller},
             )
-            for flow_key, flow_data in flow_outputs.items()
-        }
 
         # Run a single timestep to get the realised coords of all items in the graph
         # Hopefully some of this disappears in optimization?
@@ -330,12 +336,12 @@ class CompartmentalModelODE:
                     )
             return comp_delta
 
-        def run_model(init_state, params):
+        def run_model(init_state, params, dtmax=1.0):
             term = dfx.ODETerm(vector_field)
             solver = dfx.Dopri5()  # cust
             saveat = dfx.SaveAt(ts=jnp.arange(timesteps))
             stepsize_controller = dfx.PIDController(
-                rtol=1e-5, atol=1e-5
+                rtol=1e-5, atol=1e-5, dtmax=dtmax
             )  # , dtmax=1.0)
 
             adjoint = dfx.RecursiveCheckpointAdjoint()

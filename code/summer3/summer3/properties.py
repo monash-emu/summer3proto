@@ -47,6 +47,47 @@ class PropertyAccessor:
         pl_expr = pl.col(self._uname).is_in(iargs)
         return PAccessExpr(pl_expr, self)
 
+    def _binop(self, other, op):
+        iarg = self._pik_map.inverse[other]
+        pl_expr = getattr(pl.col(self._uname), op)(iarg)
+        return PAccessExpr(pl_expr, self)
+
+    def eq(self, other):
+        return self._binop(other, "eq")
+
+    def __eq__(self, other):
+        return self.eq(other)
+
+    def ne(self, other):
+        return self._binop(other, "ne")
+
+    def __ne__(self, other):
+        return self.ne(other)
+
+    def ge(self, other):
+        return self._binop(other, "ge")
+
+    def __ge__(self, other):
+        return self.ge(other)
+
+    def gt(self, other):
+        return self._binop(other, "gt")
+
+    def __gt__(self, other):
+        return self.gt(other)
+
+    def le(self, other):
+        return self._binop(other, "le")
+
+    def __le__(self, other):
+        return self.le(other)
+
+    def lt(self, other):
+        return self._binop(other, "lt")
+
+    def __lt__(self, other):
+        return self.lt(other)
+
 
 class PropertyTable:
     def __init__(self, uname_strat_map, uname_propidxkey_map, prop_table):
@@ -76,7 +117,9 @@ def build_property_tables(cm, compartments):
         uname_strat_map[uname] = strat
         _prop_tab[uname] = v = np.empty(len(compartments), dtype=int)
         v.fill(-1)
-        uname_propidxkey_map[uname] = bidict({i: k for (i, k) in enumerate(strat.strata)})
+        uname_propidxkey_map[uname] = bidict(
+            {i: k for (i, k) in enumerate(strat.strata)}
+        )
 
     for comp_i, c in enumerate(compartments):
         for strat, stratum in c.strata:
@@ -85,6 +128,8 @@ def build_property_tables(cm, compartments):
             prop_i = ik_map.inverse[stratum]
             _prop_tab[uname][comp_i] = prop_i
 
-    prop_table = pl.DataFrame(_prop_tab | {"index": np.arange(len(compartments))})
+    prop_table = pl.DataFrame(
+        _prop_tab | {"index": np.arange(len(compartments))}
+    ).with_columns(pl.all().replace(-1, None))
 
     return PropertyTable(uname_strat_map, uname_propidxkey_map, prop_table)

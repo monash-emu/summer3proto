@@ -15,6 +15,7 @@ import numpy as np
 from . import proto
 import pandas as pd
 from .utils import squash_to_slice, Indexer, get_rolling_reduction
+from summer3.polarized.properties import PropertyTable
 
 
 class ManagedIndex:
@@ -64,6 +65,11 @@ class ManagedIndex:
         if isinstance(self.index, proto.CompartmentContainer):
             qres = self.index.query(q)
             new_subidx, idx_arr = qres, qres.parent_indices
+        elif isinstance(self.index, PropertyTable):
+            filtered_pt = self.index.filter(q)
+            idx_arr = filtered_pt.df["index"].to_numpy()
+            filtered_pt.reindex()
+            new_subidx = filtered_pt
         elif isinstance(self.index, pd.Index):
             pdlookup = pd.Series(index=self.index, data=np.arange(len(self.index)))
             qbackref = pdlookup.loc[q]
