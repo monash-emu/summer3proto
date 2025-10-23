@@ -235,6 +235,11 @@ class ManagedArray:
         """
         s_set = set(self.dims)
         o_set = set(other.dims)
+
+        # +++ Should attempt some kind of matching here...
+        # for cdim in s_set.intersection(o_set):
+        #    if self.indices[cdim].index != other.indices[cdim].index
+
         s_extras = s_set.difference(o_set)
         o_extras = o_set.difference(s_set)
         other_expanded = other
@@ -308,6 +313,12 @@ class ManagedArray:
             ManagedArray: Result of multiplication.
         """
         return self._rop(other, jnp.multiply)
+
+    def __truediv__(self, other):
+        return self._lop(other, jnp.true_divide)
+
+    def __floordiv__(self, other):
+        return self._lop(other, jnp.floor_divide)
 
     def __add__(self, other):
         """Element-wise addition.

@@ -20,7 +20,7 @@ class CategoryGroup:
     def __init__(self, cats: dict[str, LazyExpr]):
         self.cats = cats
 
-    def exclusive(self, pt: PropertyTable) -> bool:
+    def is_exclusive(self, pt: PropertyTable) -> bool:
         from summer3.polarized.properties import PropertyTable
 
         idxset = set()
@@ -30,6 +30,9 @@ class CategoryGroup:
                 return False
             idxset = idxset.union(curidx)
         return True
+
+    def wrap(self, data: Array) -> CategoryData:
+        return CategoryData(self, data)
 
     def __len__(self):
         return len(self.cats)
@@ -49,3 +52,6 @@ class CategoryData:
         assert len(data) == len(cats)
         self.cats = cats
         self.data = data
+
+    def __repr__(self):
+        return f"CategoryData:\n{self.cats}\n{self.data}"
