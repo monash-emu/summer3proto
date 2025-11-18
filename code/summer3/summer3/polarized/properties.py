@@ -250,7 +250,7 @@ class Property(PropertyAccessor):
     def categories(self) -> CategoryGroup:
         from summer3.polarized.categories import CategoryGroup
 
-        cats = {f"{self.name}_{t}": (self == t) for t in self.traits}
+        cats = {t: (self == t) for t in self.traits}
         return CategoryGroup(cats)
 
     def __getitem__(self, idx):
@@ -287,7 +287,7 @@ class PropertyView:
     def categories(self) -> CategoryGroup:
         from summer3.polarized.categories import CategoryGroup
 
-        cats = {f"{self.prop.name}_{t}": (self.prop == t) for t in self.traits}
+        cats = {t: (self.prop == t) for t in self.traits}
         return CategoryGroup(cats)  # type: ignore
 
     def __repr__(self):
@@ -349,7 +349,7 @@ class PropertyTable:
 
         return cls(uname_prop_map, df)
 
-    def filter(self, expr, rebuild_index=False):
+    def filter(self, expr, rebuild_index=False) -> PropertyTable:
         query_expr = expr.actualize(self)
         filtered_df = self.df.filter(query_expr)
         if rebuild_index:
@@ -357,8 +357,10 @@ class PropertyTable:
         return PropertyTable(self.uname_prop_map, filtered_df)
         # return self._filter_by_df(filtered_df, rebuild_index)
 
-    def reindex(self):
-        self.df = self.df.with_columns(index=np.arange(len(self.df)))
+    def reindex(self) -> PropertyTable:
+        return PropertyTable(
+            self.uname_prop_map, self.df.with_columns(index=np.arange(len(self.df)))
+        )
 
     def stratify(self, prop: Property, query: LazyExpr | Property):
         # return df.filter(query).with_columns(pl.all().repeat_by(n)).explode(pl.all())

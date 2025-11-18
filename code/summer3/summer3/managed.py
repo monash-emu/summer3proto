@@ -68,8 +68,7 @@ class ManagedIndex:
         elif isinstance(self.index, PropertyTable):
             filtered_pt = self.index.filter(q)
             idx_arr = filtered_pt.df["index"].to_numpy()
-            filtered_pt.reindex()
-            new_subidx = filtered_pt
+            new_subidx = filtered_pt.reindex()
         elif isinstance(self.index, pd.Index):
             pdlookup = pd.Series(index=self.index, data=np.arange(len(self.index)))
             qbackref = pdlookup.loc[q]
