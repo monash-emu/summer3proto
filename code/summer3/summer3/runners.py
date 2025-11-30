@@ -8,8 +8,8 @@ from .utils import Epoch
 import pandas as pd
 import diffrax as dfx
 
-from computegraph import ComputeGraph
-from computegraph.types import GraphObject
+from summer3.computegraph import ComputeGraph
+from summer3.computegraph.types import GraphObject
 
 
 def transition_flow_labeller(flowres: ManagedArray):

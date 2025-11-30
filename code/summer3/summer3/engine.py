@@ -1,8 +1,8 @@
 from proto import *
 from jax import lax, jit, grad, make_jaxpr
 
-from computegraph import ComputeGraph
-from computegraph.types import GraphObject
+from summer3.computegraph import ComputeGraph
+from summer3.computegraph.types import GraphObject
 
 
 class NaiveModel:

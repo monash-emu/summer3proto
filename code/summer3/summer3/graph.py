@@ -1,4 +1,4 @@
-import computegraph as cg
+from summer3 import computegraph as cg
 
 
 class Parameter(cg.Variable):

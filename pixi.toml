@@ -22,7 +22,7 @@ numpy = ">=2.3.4,<3"
 [pypi-dependencies]
 summer3 = { path = "./code/summer3", editable = true }
 #tbh = { path = "./code/tbh", editable = true}
-computegraph = { path = "../computegraph", editable = true} #{ git = "https://github.com/monash-emu/computegraph.git", rev = "c425e3ba4632b8b8f8a622d381390dba25637089"}
+#computegraph = { path = "../computegraph", editable = true} #{ git = "https://github.com/monash-emu/computegraph.git", rev = "c425e3ba4632b8b8f8a622d381390dba25637089"}
 pandas = ">=2.2.3,<2.4"
 numpyro = ">=0.16.1,<0.17"
 blackjax = ">=1.2.4,<1.3"
