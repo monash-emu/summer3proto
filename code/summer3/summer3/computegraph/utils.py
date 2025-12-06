@@ -57,7 +57,11 @@ def extract_variables(
             return [obj]
     elif isinstance(obj, Function):
         vars = [a for a in obj.args if is_var(a, source) and not should_exclude(a)]
-        vars += [v for v in obj.kwargs.values() if is_var(v, source) and not should_exclude(v)]
+        vars += [
+            v
+            for v in obj.kwargs.values()
+            if is_var(v, source) and not should_exclude(v)
+        ]
         return vars
     else:
         return []
@@ -105,7 +109,9 @@ def relabel_arg(arg, source, new_source):
         return arg
 
 
-def get_nested_func(f: Function, layer: str, nest_inputs: bool = False, param_map=None) -> Function:
+def get_nested_func(
+    f: Function, layer: str, nest_inputs: bool = False, param_map=None
+) -> Function:
     """
     Return a Function whose graph_local Variables are renamed to be nested within layer
     """
@@ -240,6 +246,45 @@ def trace_func(f, arg_table, mapped_names):
     out_kwargs = {}
     for arg in f.args:
         if isinstance(arg, GraphObject):
+            if isinstance(arg, LazyClass):
+                arg = arg._ref
+            if is_var(arg, "graph_locals"):
+                out_args.append(arg)
+            else:
+                var_name = _get_name(arg, mapped_names)
+                arg_table[var_name] = arg
+                out_args.append(local(var_name))
+                trace_object(arg, arg_table, mapped_names)
+        else:
+            out_args.append(arg)
+    for k, arg in f.kwargs.items():
+        if isinstance(arg, GraphObject):
+            if isinstance(arg, LazyClass):
+                arg = arg._ref
+            if is_var(arg, "graph_locals"):
+                out_kwargs[k] = arg
+            else:
+                var_name = _get_name(arg, mapped_names)
+                arg_table[var_name] = arg
+                out_kwargs[k] = local(var_name)
+                trace_object(arg, arg_table, mapped_names)
+        else:
+            out_kwargs[k] = arg
+
+    var_name = _get_name(f, mapped_names)
+    arg_table[var_name] = Function(f.func, tuple(out_args), out_kwargs)
+    arg_table[var_name].node_name = f.node_name
+    return var_name
+
+
+def trace_lazyobj(lobj, arg_table, mapped_names):
+
+    f = lobj._ref
+
+    out_args = []
+    out_kwargs = {}
+    for arg in f.args:
+        if isinstance(arg, GraphObject):
             if is_var(arg, "graph_locals"):
                 out_args.append(arg)
             else:
@@ -283,8 +328,7 @@ def trace_object(obj, arg_table=None, mapped_names=None):
         var_name = _get_name(obj, mapped_names)
         arg_table[var_name] = obj
     elif isinstance(obj, LazyClass):
-        var_name, _, _ = trace_object(obj._ref, arg_table, mapped_names)
-        mapped_names[obj] = var_name
+        var_name = trace_lazyobj(obj, arg_table, mapped_names)
         # obj._trace(arg_table, mapped_names)
     else:
         raise TypeError("Not a GraphObject", obj)
@@ -318,7 +362,10 @@ def trace_with_named_keys(in_graph, validate_keys=True):
                 raise KeyError(msg)
 
     for k, v in in_graph.items():
-        g[k] = Function(assign, [local(m[v])])
+        if isinstance(v, LazyClass):
+            g[k] = Function(assign, [local(m[v._ref])])
+        else:
+            g[k] = Function(assign, [local(m[v])])
     return g, m
 
 
