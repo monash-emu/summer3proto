@@ -10,7 +10,8 @@ from itertools import product
 
 from summer3.polarized.properties import Property, PropertyTable, LazyExpr
 from summer3.polarized.categories import CategoryGroup, CategoryData
-from summer3.polarized.flows import FlowSpec, source, dest
+
+# from summer3.polarized.flows import FlowSpec, source, dest
 
 
 def op_cats_to_idx_series(op_cats: CategoryGroup, fpt):
@@ -69,7 +70,7 @@ def apply_op(lhs: ExpandingArray, so: CategoryData, pt: PropertyTable):
     # These are the 'at' selectors for the expanded LHS (ie where to update)
     active_indices_lhs = np.arange(len(unique_opdf))[rhs_mask]
 
-    new_data = lhs.data[lhs_indices].at[active_indices_lhs].mul(so.data[rhs_selector])
+    new_data = lhs._data[lhs_indices].at[active_indices_lhs].mul(so.data[rhs_selector])
 
     gwi = unique_opdf.with_columns(
         pl.Series("opidx", np.arange(len(unique_opdf))),
@@ -90,3 +91,21 @@ def catdata_to_expanding(cat_data: CategoryData, pt: PropertyTable):
     if df.null_count() > 0:
         raise ValueError("cat_data must cover entire PropertyTable")
     return ExpandingArray(df, cat_data.data, pt)
+
+
+class OrderedOp:
+    def __init__(self, value: float | CategoryData, order: int):
+        self.value = value
+        self.order = order
+
+    def __repr__(self):
+        return f"OrderedOp {self.order}"
+
+
+class MulOp(OrderedOp):
+    def __init__(self, value: float | CategoryData, order: int):
+        super().__init__(value, order)
+
+
+# b = [OrderedOp(*x) for x in a]
+# sorted(b, key=lambda x: x.order)

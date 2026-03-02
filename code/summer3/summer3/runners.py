@@ -398,3 +398,133 @@ class CompartmentalModelODE:
             epoch,
             {"get_flow_values": get_flow_values, "vector_field": vector_field},
         )
+
+
+class CompartmentalModelODEPL:
+    def __init__(self, cmap: CompartmentMap, flows: dict[str, TransitionFlow]):
+        self.cmap = cmap
+        self.flows = flows
+        self._actual_flows = {}
+
+    def actualize_flows(self):
+        graph_dict = {}
+        actual_flows = {}
+        for k, flow in self.flows.items():
+            if isinstance(flow.param, GraphObject):
+                flow_param_key = f"_flow_param_{k}"
+                graph_dict[flow_param_key] = flow.param
+            else:
+                flow_param_key = None
+            adj_param_keys = {}
+            for iadj, adj in enumerate(flow.adjustments):
+                if isinstance(adj, GraphObject):
+                    adj_key = f"_flow_param_{k}_adj[{iadj}]"
+                    adj_param_keys[iadj] = adj_key
+                    graph_dict[adj_key] = adj
+            actual_flows[k] = flow.actualize(self.cmap, flow_param_key, adj_param_keys)
+
+        return ComputeGraph(graph_dict), actual_flows
+
+    def get_runner(
+        self, timesteps, epoch=None, jit=False, computed_values=None
+    ) -> CompartmentalModelODERunner:
+        cgraph, actual_flows = self.actualize_flows()
+        cgraphfunc = cgraph.get_callable(output_all=True)
+        computed_values = computed_values or []
+
+        def get_flow_values(t, y, params):
+            comp_vals = y
+            hdata = self.cmap.wrap_data(comp_vals)
+            hdata = hdata.as_managed_array()
+            model_variables = {"time": t, "compartment_values": hdata}
+            dyn_values = cgraphfunc(model_variables=model_variables, parameters=params)
+
+            stored_flows = {}
+            for k, flow in actual_flows.items():
+                flow_vals = flow.get_flow_vals(hdata, dyn_values)
+                stored_flows[k] = flow_vals
+
+            return stored_flows
+
+        def vector_field(t, y, params):
+            comp_vals = y
+            hdata = self.cmap.wrap_data(comp_vals)
+            hdata = hdata.as_managed_array()
+            model_variables = {"time": t, "compartment_values": hdata}
+            dyn_values = cgraphfunc(model_variables=model_variables, parameters=params)
+
+            comp_delta = jnp.zeros_like(comp_vals)
+            for k, flow in actual_flows.items():
+                flow_vals = flow.get_flow_vals(hdata, dyn_values)
+                if hasattr(flow, "src_cmap"):
+                    comp_delta = comp_delta.at[flow.src_cmap.parent_indices].subtract(
+                        flow_vals
+                    )
+                if hasattr(flow, "dest_cmap"):
+                    comp_delta = comp_delta.at[flow.dest_cmap.parent_indices].add(
+                        flow_vals
+                    )
+            return comp_delta
+
+        def run_model(init_state, params, dtmax=1.0):
+            term = dfx.ODETerm(vector_field)
+            solver = dfx.Dopri5()  # cust
+            saveat = dfx.SaveAt(ts=jnp.arange(timesteps))
+            stepsize_controller = dfx.PIDController(
+                rtol=1e-5, atol=1e-5, dtmax=dtmax
+            )  # , dtmax=1.0)
+
+            adjoint = dfx.RecursiveCheckpointAdjoint()
+            # adjoint = diffrax.ForwardMode()
+            # adjoint = diffrax.DirectAdjoint()
+            sol = dfx.diffeqsolve(
+                term,
+                solver,
+                t0=0,
+                t1=timesteps,
+                throw=False,
+                max_steps=int(2 * timesteps),
+                dt0=0.1,
+                y0=init_state,
+                args=params,
+                saveat=saveat,
+                stepsize_controller=stepsize_controller,
+                adjoint=adjoint,
+            )
+
+            flow_values = jax.vmap(get_flow_values, in_axes=(0, 0, None))(
+                sol.ts, sol.ys, params
+            )
+
+            return {
+                "compartments": sol.ys,
+                "flows": flow_values,
+                "computed_values": {},
+                "aux": sol,
+            }
+
+            # stored_dyn = {}
+            # for k in computed_values:
+            #    if isinstance(dyn_values[k], ManagedArray):
+            #        stored_dyn[k] = dyn_values[k].data
+            #    else:
+            #        stored_dyn[k] = dyn_values[k]
+
+            # return tstep_data, {
+            #    "compartments": tstep_data,
+            #    "flows": stored_flows,
+            #    "computed_values": stored_dyn,
+            # }
+
+        if jit:
+            run_model = jax.jit(run_model)
+
+        return CompartmentalModelODERunner(
+            self,
+            cgraph,
+            actual_flows,
+            run_model,
+            timesteps,
+            epoch,
+            {"get_flow_values": get_flow_values, "vector_field": vector_field},
+        )

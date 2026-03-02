@@ -10,7 +10,11 @@ from summer3.polarized.properties import (
     PropertyTable,
     LazyExpr,
 )
-from summer3.polarized.categories import CategoryGroup
+from summer3.polarized.categories import CategoryGroup, CategoryData
+from summer3.polarized.properties import PropertyTable
+from summer3.polarized.expanding import OrderedOp, MulOp
+
+from summer3.computegraph.types import GraphObject
 
 
 def source(prop: Property) -> ProxyProperty:
@@ -21,7 +25,7 @@ def dest(prop: Property) -> ProxyProperty:
     return ProxyProperty(prop, "dest")
 
 
-class FlowSpec:
+class TransitionFlowResolver:
     def __init__(
         self,
         sourceq: LazyExpr | CategoryGroup,
@@ -97,11 +101,13 @@ class FlowSpec:
         fs = self
         if isinstance(fs.sourceq, CategoryGroup):
             if isinstance(fs.destq, CategoryGroup):
+                if not len(fs.sourceq.cats) == len(fs.destq.cats):
+                    raise ValueError("CategoryGroup length mismatch")
                 accum_df = []
                 for (sk, sv), (dk, dv) in zip(
                     fs.sourceq.cats.items(), fs.destq.cats.items()
                 ):
-                    pt = FlowSpec(sv, dv, fs.pt).get_flow_pt()
+                    pt = TransitionFlowResolver(sv, dv, fs.pt).get_flow_pt()
                     accum_df.append(pt.df)
                 full_df = pl.concat(accum_df)
                 full_df = full_df.with_columns(index=np.arange(len(full_df)))
@@ -183,3 +189,120 @@ def valid_columns(df):
     validity_s = df.select(~pl.all().is_null().all())
     valid_columns = [c.name for c in validity_s if c[0] and (c.name != "index")]
     return valid_columns
+
+
+from summer3.polarized.properties import PropertyTable
+
+
+class FlowMap:
+    def build_flow_pt(self, comp_pt: PropertyTable) -> PropertyTable:
+        raise NotImplementedError()
+
+
+class ExitMap(FlowMap):
+    def __init__(self, source_query: LazyExpr):
+        self.source_query = source_query
+
+    def build_flow_pt(self, comp_pt: PropertyTable) -> PropertyTable:
+        """Build a PropertyTable representing this flow
+        Args:
+            comp_pt: Compartments PropertyTable
+
+        Returns:
+            The flow PropertyTable (with source properties)
+        """
+        source_table = comp_pt.filter(self.source_query, rebuild_index=False)
+        source_df = source_table.df
+
+        prop_names = [k for k in source_df.columns if k != "index"]
+        source_prop_map = {
+            f"{k}_source": source(comp_pt.uname_prop_map[k]) for k in prop_names
+        }
+
+        new_df = source_df.rename(
+            {k: f"{k}_source" for k in source_df.columns}
+        ).with_columns(index=np.arange(len(source_df)))
+
+        new_uname_prop_map = bidict(source_prop_map)
+        return PropertyTable(new_uname_prop_map, new_df)  # type: ignore
+
+
+class EntryMap(FlowMap):
+    def __init__(self, dest_query: LazyExpr):
+        self.dest_query = dest_query
+
+    def build_flow_pt(self, comp_pt: PropertyTable) -> PropertyTable:
+        """Build a PropertyTable representing this flow
+        Args:
+            comp_pt: Compartments PropertyTable
+
+        Returns:
+            The flow PropertyTable (with source properties)
+        """
+        dest_table = comp_pt.filter(self.dest_query, rebuild_index=False)
+        dest_df = dest_table.df
+
+        prop_names = [k for k in dest_df.columns if k != "index"]
+        dest_prop_map = {
+            f"{k}_dest": dest(comp_pt.uname_prop_map[k]) for k in prop_names
+        }
+
+        new_df = dest_df.rename({k: f"{k}_dest" for k in dest_df.columns}).with_columns(
+            index=np.arange(len(dest_df))
+        )
+
+        new_uname_prop_map = bidict(dest_prop_map)
+        return PropertyTable(new_uname_prop_map, new_df)  # type: ignore
+
+
+class TransitionMap(FlowMap):
+    def __init__(
+        self,
+        source_query: LazyExpr | CategoryGroup,
+        dest_query: LazyExpr | CategoryGroup,
+    ):
+        self.source_query = source_query
+        self.dest_query = dest_query
+
+    def build_flow_pt(self, comp_pt: PropertyTable) -> PropertyTable:
+        fspec = TransitionFlowResolver(self.source_query, self.dest_query, comp_pt)
+        return fspec.get_flow_pt()
+
+
+# +++
+# We need to specify absolute/proportional somewhere - presumably on Flow class constructor
+# Which always applies to source compartments, so entry flows are always absolute
+# Notes:
+# Need to provide actualize_flow method (easy enough - get the indices from the model PT and use expanding ops
+# to perform adjustments and final multiply
+#
+
+
+# FlowSpec
+# fmap
+# base_param
+# operations
+
+# TransitionFlow
+# fmap : TransitionMap
+# operations: [BaseOp(base_param, order=FIRST), MulOp]
+
+
+class FlowSpec:
+    def __init__(
+        self,
+        name: str,
+        fmap: FlowMap,
+        initial_ops: list[OrderedOp] | float | CategoryData | GraphObject,
+        # base_param: float | CategoryData | cg.types.GraphObject,
+    ):
+        self.name = name
+        self.fmap = fmap
+        if not isinstance(initial_ops, list):
+            initial_ops = [MulOp(initial_ops, 0)]
+        self.operations: list[OrderedOp] = initial_ops
+        # self.meta = {}  +++ We probably will need this for advanced flow queries later - but let's not
+        # get ahead of ourselves...
+
+    def add_op(self, op: OrderedOp):
+        self.operations = sorted(self.operations + [op], key=lambda x: x.order)
