@@ -21,6 +21,7 @@ numpy = ">=2.3.4,<3"
 
 [pypi-dependencies]
 summer3 = { path = "./code/summer3", editable = true }
+wbe = { path = "./code/wbe", editable = true }
 #tbh = { path = "./code/tbh", editable = true}
 #computegraph = { path = "../computegraph", editable = true} #{ git = "https://github.com/monash-emu/computegraph.git", rev = "c425e3ba4632b8b8f8a622d381390dba25637089"}
 pandas = ">=2.2.3,<2.4"
@@ -36,6 +37,7 @@ polars = ">=1.33.1, <2"
 bidict = ">=0.23.1, <0.24"
 jax = "<0.7"
 jaxlib = "<0.7"
+jupyterlab-git = ">=0.51.4, <0.52"
 
 [feature.test.dependencies]
 pytest = "*"
