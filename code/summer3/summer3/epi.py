@@ -1,3 +1,5 @@
+from typing import Optional
+
 import datetime as dt
 from .runners import *
 from .utils import TimeIndex, dti_to_epoch, strats_for_cmap
@@ -37,11 +39,17 @@ def mixing_matrix(data, source_cats: CategoryGroup, dest_cats: CategoryGroup):
 class InfectionProcess:
     def __init__(
         self,
-        mm: ManagedArray,
         infectee_cats: CategoryGroup,
         infector_cats: CategoryGroup,
         infectious_compartments: StratSpec,
+        mm: Optional[ManagedArray] = None,
     ):
+        if mm is None:
+            mm = mixing_matrix(
+                np.ones((len(infectee_cats), len(infector_cats))),
+                infector_cats,
+                infectee_cats,
+            )
         self.mm = mm
         self.infector_cats = infector_cats
         self.infectee_cats = infectee_cats
