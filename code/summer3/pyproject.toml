@@ -1,6 +1,6 @@
 [project]
 name = "summer3"
-version = "0.2a"
+version = "0.3a"
 authors = [
     {name = "David Shipman", email= "david.shipman@monash.edu"}
 ]
@@ -13,7 +13,6 @@ dependencies = [
     "polars>=1.33.1",
     "bidict>=0.23.1",
     "networkx",
-    #"computegraph @ git+https://github.com/monash-emu/computegraph@summer3",
 ]
 
 [build-system]
